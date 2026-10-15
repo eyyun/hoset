@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Nothing that carries a session may leave the device: the cookie jar and the cached
+    viewer would otherwise be restored with the account already signed in.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="deli_cookies.xml" />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="datastore" />
+    <exclude domain="database" path="." />
+</full-backup-content>

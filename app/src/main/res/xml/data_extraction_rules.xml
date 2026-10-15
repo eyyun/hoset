@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ reads this instead of the full-backup rules. Both cloud backup and
+    device-to-device transfer are excluded, because either one would hand a new install
+    the previous session.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+        <exclude domain="database" path="." />
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+        <exclude domain="database" path="." />
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

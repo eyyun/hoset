@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The app is an unofficial client, so it carries its own name rather than the
+        site's. The site's name still appears where it means the site itself (the account
+        you sign in with, the server that is slow, …).
+    -->
+    <string name="app_name">Hoset</string>
+</resources>

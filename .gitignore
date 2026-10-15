@@ -1,0 +1,37 @@
+# Gradle and Android build output
+.gradle/
+.kotlin/
+build/
+app/build/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.idsig
+
+# Machine-specific configuration
+local.properties
+gradle.properties.bak
+
+# Signing material — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Editors and operating systems
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Scratch space left over from diagnosing the live site, and tool-local state
+.tmpcheck/
+.freebuff/
+AGENTS.md
+*.log
+
+# The site audits name a live site's weaknesses and the account behind them. They stay
+# on this machine unless someone deliberately decides to publish them.
+SITE-AUDIT.md
+SITE-AUDIT-DEEP.md

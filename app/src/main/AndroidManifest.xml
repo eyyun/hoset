@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        The voice room records and plays audio through the room page running inside the
+        hidden WebView (see ChatBridge), so the app itself has to hold the recording
+        permission and grant it to that capture request.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!--
+        Backup is off on purpose. The app keeps the delidehset.com session cookies in
+        SharedPreferences, and Android auto-backup would upload them to the user's cloud
+        backup and restore them on the next install — which made a freshly installed
+        build come up already signed in. The rules below cover device-to-device transfer
+        as well, where the allowBackup flag alone is not always honoured.
+    -->
+    <application
+        android:name=".DeliApp"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="false"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.Delidehset">
+
+        <!--
+            adjustNothing on purpose. With adjustResize the system shrinks the window for
+            the keyboard, which drags the bottom bar up and leaves it sitting on top of the
+            keyboard. The bar belongs to the screen's bottom edge, where the keyboard
+            simply covers it; the app lifts the content it wants lifted (the chat
+            composer) by the IME inset itself — see DeliScaffold.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustNothing"
+            android:theme="@style/Theme.Delidehset">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

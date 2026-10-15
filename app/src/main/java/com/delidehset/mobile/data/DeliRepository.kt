@@ -1,0 +1,721 @@
+package com.delidehset.mobile.data
+
+import com.delidehset.mobile.ui.tr
+import com.delidehset.mobile.ui.trf
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
+/** Outcome of a mutating call, with whatever message the site produced. */
+data class ActionResult(val ok: Boolean, val message: String?, val raw: DeliResponse? = null)
+
+/** A server-rendered list page: its table, or the note explaining why it is empty. */
+data class TablePage(
+    val headers: List<String> = emptyList(),
+    val rows: List<SimpleRow> = emptyList(),
+    val note: String? = null,
+)
+
+/** Everything a post page gives us. */
+data class PostPage(
+    val post: PostDetail,
+    val comments: List<CommentNode>,
+    val commentVotes: Map<String, Int>,
+    val commentForm: DiscoveredForm?,
+    val html: String,
+)
+
+class DeliRepository(
+    private val http: DeliHttp,
+    private val cookies: DeliCookieJar,
+    private val session: ViewerCache,
+    private val cache: BodyCache = BodyCache.None,
+) {
+
+    private companion object {
+        /** Page bodies rarely change second to second; this makes menus feel instant. */
+        const val PAGE_TTL_MS = 5 * 60 * 1000L
+        const val FEED_TTL_MS = 60 * 1000L
+
+        /** How many post pages to warm after a feed load. */
+        const val PREFETCH_COUNT = 2
+
+        /**
+         * Sidebar destinations warmed in the background, in the site's own order. Kept
+         * short on purpose: the server is slow and every extra request at start-up
+         * competes with the screen the user is actually looking at.
+         */
+        val WARM_PAGES = listOf("/holes", "/users", "/comments")
+
+        /** Gap between warm-up requests, so they never crowd out a real one. */
+        const val WARM_GAP_MS = 400L
+    }
+
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /* ------------------------------------------------------------------ */
+    /*  Session                                                           */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Loads the home page once so we pick up the session cookies and the antiforgery
+     * token, and learn whether the stored session is still valid.
+     */
+    suspend fun bootstrap(): Viewer {
+        val res = DeliErrors.withRetry { http.get("/") }
+        val doc = HtmlParser.document(res.body)
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
+        val viewer = HtmlParser.parseViewer(doc)
+        session.save(viewer)
+        return viewer
+    }
+
+    suspend fun currentViewer(): Viewer = bootstrap()
+
+    /**
+     * Sign-in. The form posts `username`, `password` and `redirect`; a successful
+     * login answers with a redirect, a failed one re-renders the page with an error.
+     */
+    suspend fun login(username: String, password: String): LoginResult {
+        val page = http.get("/login")
+        val doc = HtmlParser.document(page.body)
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
+
+        val res = http.postForm(
+            "/login",
+            listOf(
+                "username" to username,
+                "password" to password,
+                "redirect" to "/",
+            ),
+            referer = "/login",
+        )
+
+        return when {
+            res.isRedirect && res.location?.contains("/login") != true -> {
+                val viewer = bootstrap()
+                if (viewer.isSignedIn) LoginResult.Success
+                else LoginResult.Failure("Giriş yapılamadı. Kullanıcı adı veya şifre hatalı olabilir.")
+            }
+
+            res.isSuccess -> {
+                // Re-rendered form: pull the validation message out of it.
+                val failDoc = HtmlParser.document(res.body)
+                http.updateAntiforgery(HtmlParser.antiforgeryToken(failDoc))
+                val message = failDoc.select(".validation-summary-errors li, .alert-danger, .text-danger")
+                    .firstOrNull { it.text().isNotBlank() }?.text()?.trim()
+                    ?: failDoc.selectFirst("#login .invalid-feedback")?.text()?.trim()
+                LoginResult.Failure(message ?: "Kullanıcı adı veya şifre hatalı.")
+            }
+
+            res.code == 403 -> LoginResult.Failure(
+                "İstek reddedildi (403). Güvenlik doğrulaması yenilenemedi, tekrar dene."
+            )
+
+            else -> LoginResult.Failure(trf("Giriş yapılamadı (HTTP {0}).", res.code))
+        }
+    }
+
+    suspend fun logout() {
+        runCatching { http.get("/logout") }
+        cookies.clear()
+        session.clear()
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Feed                                                              */
+    /* ------------------------------------------------------------------ */
+
+    suspend fun feed(
+        sort: FeedSort,
+        hole: String? = null,
+        cursor: String? = null,
+        effortOnly: Boolean = false,
+        force: Boolean = false,
+    ): FeedResponse {
+        val url = HttpUrl.Builder()
+            .scheme("https")
+            .host("delidehset.com")
+            .addPathSegment("api")
+            .addPathSegment("feed")
+            .addPathSegment("posts")
+            .addQueryParameter("sort", sort.key)
+            .apply { hole?.takeIf { it.isNotBlank() }?.let { addQueryParameter("hole", it) } }
+            .apply { cursor?.takeIf { it.isNotBlank() }?.let { addQueryParameter("cursor", it) } }
+            .apply { if (effortOnly) addQueryParameter("effortposts_only", "true") }
+            .build()
+            .toString()
+
+        // Only the first page is cached; subsequent pages are keyed by cursor anyway.
+        val key = "feed:$url"
+        if (!force) {
+            cache.read(key)?.takeIf { it.isFresh(FEED_TTL_MS) }?.let { return decodeFeed(it.body) }
+        }
+
+        return try {
+            val body = DeliErrors.withRetry {
+                val res = http.get(url, accept = "application/json")
+                if (!res.isSuccess) throw DeliException(DeliErrors.explainHttp(res.code, "Akış"))
+                res.body
+            }
+            cache.write(key, body)
+            decodeFeed(body)
+        } catch (t: Throwable) {
+            // Offline / flaky network: show what we had rather than an empty screen.
+            cache.read(key)?.let { decodeFeed(it.body) } ?: throw t
+        }
+    }
+
+    private fun decodeFeed(body: String): FeedResponse =
+        json.decodeFromString(FeedResponse.serializer(), body)
+
+    /**
+     * Warms the cache for the first few posts of a feed so tapping one opens instantly.
+     * Failures are ignored on purpose — this is a convenience, not a requirement.
+     */
+    suspend fun prefetchPosts(permalinks: List<String>) {
+        for (link in permalinks.take(PREFETCH_COUNT)) {
+            runCatching { post(link) }
+        }
+    }
+
+    /**
+     * Fetches the sidebar pages once, in the background, right after start-up. They are
+     * plain server-rendered menus that the site takes its time with, and pre-warming them
+     * is what makes opening one feel instant instead of showing a spinner.
+     */
+    suspend fun warmPages() {
+        for (path in WARM_PAGES) {
+            if (!coroutineContext.isActive) return
+            runCatching { page(path) }
+            delay(WARM_GAP_MS)
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Posts and comments                                                */
+    /* ------------------------------------------------------------------ */
+
+    suspend fun post(permalink: String, force: Boolean = false): PostPage {
+        val key = "post:$permalink"
+        if (!force) {
+            cache.read(key)?.takeIf { it.isFresh(PAGE_TTL_MS) }?.let { return parsePostPage(it.body, permalink) }
+        }
+
+        val html = try {
+            DeliErrors.withRetry {
+                val res = http.get(permalink)
+                if (res.isRedirect && res.location?.contains("/login") == true) throw NotSignedInException()
+                if (!res.isSuccess) throw DeliException(DeliErrors.explainHttp(res.code, "Gönderi"))
+                res.body
+            }
+        } catch (t: Throwable) {
+            cache.read(key)?.body ?: throw t
+        }
+
+        cache.write(key, html)
+        return parsePostPage(html, permalink)
+    }
+
+    private fun parsePostPage(html: String, permalink: String): PostPage {
+        val doc = HtmlParser.document(html)
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
+
+        val post = HtmlParser.parsePost(html, permalink)
+            ?: throw DeliException("Gönderi sayfası beklenen biçimde gelmedi; site güncellenmiş olabilir.")
+
+        return PostPage(
+            post = post,
+            comments = HtmlParser.parseComments(html),
+            commentVotes = HtmlParser.commentVotes(html),
+            commentForm = HtmlParser.parseForm(html, "form[data-comment-form]")
+                ?: HtmlParser.parseForm(html, "form[action^=/comment]"),
+            html = html,
+        )
+    }
+
+    suspend fun vote(kind: String, id: String, value: Int): ActionResult {
+        ensureAntiforgery()
+        val res = http.postEmpty("/vote/$kind/$id/$value", referer = "/")
+        return interpret(res)
+    }
+
+    /**
+     * Posts a comment using the form the server rendered for this session, so the
+     * request matches whatever field names the current build expects.
+     *
+     * The shipped build names the thread field `parent_fullname` and encodes the target
+     * as `p_<post uuid>` for a top-level comment, `c_<comment uuid>` for a reply — the
+     * same values the site's own JavaScript puts in the hidden input it generates. When
+     * a build does not expose that field, the older `post_id`/`parent_id` names are used
+     * instead, so this keeps working if the platform changes again.
+     */
+    suspend fun comment(
+        form: DiscoveredForm?,
+        postId: String,
+        body: String,
+        parentId: String? = null,
+        hole: String? = null,
+    ): ActionResult {
+        ensureAntiforgery()
+        val action = form?.action?.takeIf { it.isNotBlank() } ?: "/comment"
+        val res = http.postForm(action, commentFields(form, postId, body, parentId, hole), referer = "/")
+        return interpret(res, "Yorum")
+    }
+
+    suspend fun deletePost(id: String): ActionResult {
+        ensureAntiforgery()
+        return interpret(http.postEmpty("/delete/post/$id", referer = "/"))
+    }
+
+    suspend fun undeletePost(id: String): ActionResult {
+        ensureAntiforgery()
+        return interpret(http.postEmpty("/undelete_post/$id", referer = "/"))
+    }
+
+    suspend fun reportPost(id: String, reason: String, platform: Boolean = false): ActionResult {
+        ensureAntiforgery()
+        val path = if (platform) "/report/post/$id" else "/report/hole/post/$id"
+        return interpret(http.postForm(path, listOf("reason" to reason), referer = "/"))
+    }
+
+    suspend fun reportComment(id: String, reason: String, platform: Boolean = false): ActionResult {
+        ensureAntiforgery()
+        val path = if (platform) "/report/comment/$id" else "/report/hole/comment/$id"
+        return interpret(http.postForm(path, listOf("reason" to reason), referer = "/"))
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Submitting a post                                                 */
+    /* ------------------------------------------------------------------ */
+
+    /** The submit form is public, which lets us read its exact fields and hole list. */
+    suspend fun submitForm(): DiscoveredForm? {
+        val res = http.get("/submit")
+        val doc = HtmlParser.document(res.body)
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
+        return HtmlParser.parseForm(res.body, "form#submitform")
+            ?: HtmlParser.parseForm(res.body, "form[action^=/submit]")
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Account settings                                                  */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * The signed-in settings pages, read straight from the server.
+     *
+     * delidehset.com has two tabs — Personal (`/settings`) and Security
+     * (`/settings/security`) — and posts every change as a form-encoded request with the
+     * antiforgery token in the `RequestVerificationToken` header, which is exactly what
+     * [DeliHttp] does. The field names below are the ones the live pages actually use.
+     */
+    suspend fun accountSettings(force: Boolean = false): AccountSettings {
+        val personal = HtmlParser.parsePersonalSettings(page("/settings", force))
+        val security = runCatching {
+            HtmlParser.parseSecuritySettings(page("/settings/security", force))
+        }.getOrElse { SecuritySettings() }
+        return AccountSettings(personal, security)
+    }
+
+    /** Bio and pronouns, the two free-text fields of the Personal tab. */
+    suspend fun savePersonalSettings(bio: String, pronouns: String): ActionResult =
+        settingsPost("/settings/personal", listOf("bio" to bio, "pronouns" to pronouns))
+
+    suspend fun saveLanguage(language: String): ActionResult =
+        settingsPost("/settings/language", listOf("language" to language))
+
+    /**
+     * Just the account's language, without the security page.
+     *
+     * The app follows the site's language, so it reads this one value — asking for both
+     * settings pages to get it would be a second request for a field nobody else wants.
+     */
+    suspend fun accountLanguage(): String =
+        HtmlParser.parsePersonalSettings(page("/settings")).language
+
+    suspend fun saveTheme(theme: String, themeColor: String?): ActionResult {
+        val fields = mutableListOf("theme" to theme)
+        themeColor?.takeIf { it.isNotBlank() }?.let { fields += "themecolor" to it }
+        return settingsPost("/settings/theme", fields)
+    }
+
+    suspend fun changePassword(oldPassword: String, newPassword: String, confirm: String): ActionResult =
+        settingsPost(
+            "/settings/password",
+            listOf(
+                "old_password" to oldPassword,
+                "new_password" to newPassword,
+                "new_password_confirm" to confirm,
+            ),
+        )
+
+    suspend fun changeEmail(password: String, email: String): ActionResult =
+        settingsPost("/settings/email", listOf("password" to password, "email" to email))
+
+    /**
+     * `/contact` is a single `message` textarea that the site's own JavaScript posts to
+     * the page itself, so the app can offer it natively instead of hosting the page.
+     */
+    suspend fun contact(message: String): ActionResult {
+        ensureAntiforgery()
+        val res = http.postForm("/contact", listOf("message" to message), referer = "/contact")
+        return interpret(res, "Mesaj")
+    }
+
+    /**
+     * Where the site's own picture upload actually goes.
+     *
+     * Not the `action` its form names: that route (`/settings/images/profile`) is the
+     * avatar-render path and answers 500 today — "Avatars are temporarily disabled — the
+     * render server isn't configured" — which is exactly how an upload can look like it
+     * did nothing. The site's own JavaScript posts the picture to the personal-settings
+     * endpoint instead, with the file under the same `profile` part, and that request is
+     * the one the server answers with `Saved!`. Captured from the browser and then
+     * replayed against the live site with a real session; see the temporary test.
+     */
+    private val picturePath = "/settings/personal"
+
+    suspend fun uploadProfileImage(fileName: String, contentType: String, bytes: ByteArray): ActionResult =
+        settingsUpload(
+            picturePath,
+            uploadTarget("profile").second,
+            fileName,
+            contentType,
+            bytes,
+            referer = picturePath,
+        )
+
+    /** The banner goes the same way, with the same field name the page gives it. */
+    suspend fun uploadBanner(fileName: String, contentType: String, bytes: ByteArray): ActionResult =
+        settingsUpload(
+            picturePath,
+            uploadTarget("banner").second,
+            fileName,
+            contentType,
+            bytes,
+            referer = picturePath,
+        )
+
+    /** What the live settings page says about its own picture forms; [] when unreadable. */
+    private var imageForms: Map<String, Pair<String, String>>? = null
+
+    /**
+     * The endpoint and file field name the server currently expects for a picture.
+     *
+     * Taken from the settings page itself; the names below are only the fallback for a
+     * build where that page cannot be read at all.
+     */
+    private suspend fun uploadTarget(kind: String): Pair<String, String> {
+        val discovered = imageForms ?: runCatching { HtmlParser.parseImageUploadForms(page("/settings")) }
+            .getOrDefault(emptyMap())
+            .also {
+                imageForms = it
+                android.util.Log.d("DeliUpload", "settings picture forms: $it")
+            }
+        return discovered[kind] ?: if (kind == "banner") {
+            "/settings/images/banner" to "banner"
+        } else {
+            "/settings/images/profile" to "profile"
+        }
+    }
+
+    private suspend fun settingsPost(path: String, fields: List<Pair<String, String>>): ActionResult {
+        ensureAntiforgery()
+        val res = http.postForm(path, fields, referer = "/settings")
+        // The settings pages are server-rendered, so the saved values come back on the
+        // next fetch: drop the cached copies rather than showing what was just replaced.
+        cache.clear()
+        return interpret(res)
+    }
+
+    private suspend fun settingsUpload(
+        path: String,
+        field: String,
+        fileName: String,
+        contentType: String,
+        bytes: ByteArray,
+        referer: String = "/settings",
+    ): ActionResult {
+        ensureAntiforgery()
+        val res = http.postFile(path, field, fileName, contentType, bytes, referer = referer)
+        cache.clear()
+        // Uploads are the one call whose failure mode is invisible in the UI (the picture
+        // simply does not change), so what came back is worth a line in logcat — including
+        // the *visible* text of an error page, which is where the site's reason for a 500
+        // lives, rather than the head of its markup.
+        android.util.Log.d(
+            "DeliUpload",
+            "POST $path ($fileName, $contentType, ${bytes.size} B) -> ${res.code} " +
+                "${res.contentType} loc=${res.location} " +
+                "text=${HtmlParser.stripTags(res.body).replace(Regex("\\s+"), " ").take(400)}",
+        )
+        return interpret(res)
+    }
+
+    suspend fun submitPost(
+        form: DiscoveredForm?,
+        title: String,
+        body: String,
+        hole: String,
+        nsfw: Boolean = false,
+        anonymous: Boolean = false,
+        tripcodeSecret: String? = null,
+    ): ActionResult {
+        ensureAntiforgery()
+        val fields = mutableListOf<Pair<String, String>>()
+        for (f in form?.fields.orEmpty()) {
+            if (f.kind == FieldKind.CHECKBOX && f.value.isEmpty()) continue
+            when (f.name) {
+                form?.bodyField, form?.titleField -> continue
+                "anonymous" -> fields += f.name to anonymous.toString()
+                "hole" -> fields += f.name to hole
+                else -> fields += f.name to f.value
+            }
+        }
+        fields += (form?.titleField ?: "title") to title
+        fields += (form?.bodyField ?: "body") to body
+        if (form?.fields?.none { it.name == "hole" } != false) fields += "hole" to hole
+        if (nsfw && fields.none { it.first == "nsfw" }) fields += "nsfw" to "true"
+        if (anonymous) {
+            if (fields.none { it.first == "tripcode_secret" } && tripcodeSecret != null) {
+                fields += "tripcode_secret" to tripcodeSecret
+            }
+        }
+
+        val res = http.postMultipart("/submit", fields, referer = "/submit")
+        return interpret(res)
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Browsing pages                                                    */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Fetches a server rendered page: a fresh cached copy is returned immediately,
+     * and a stale copy is served when the network fails instead of an error screen.
+     */
+    suspend fun page(path: String, force: Boolean = false, ttlMs: Long = PAGE_TTL_MS): String {
+        val key = "page:$path"
+        if (!force) {
+            cache.read(key)?.takeIf { it.isFresh(ttlMs) }?.let { return it.body }
+        }
+        val body = try {
+            DeliErrors.withRetry { fetchPage(path) }
+        } catch (t: Throwable) {
+            cache.read(key)?.body ?: throw t
+        }
+        cache.write(key, body)
+        return body
+    }
+
+    private suspend fun fetchPage(path: String): String {
+        val res = http.get(path)
+        if (res.isRedirect && res.location?.contains("/login") == true) throw NotSignedInException()
+        if (!res.isSuccess) throw DeliException(DeliErrors.explainHttp(res.code, "Sayfa"))
+        val doc = HtmlParser.document(res.body)
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
+        return res.body
+    }
+
+    /** These pages redirect straight to a concrete page; we want the final URL. */
+    suspend fun resolveRedirect(path: String): String? {
+        val res = http.get(path)
+        return res.location?.let { http.absolute(it) }
+    }
+
+    suspend fun holes(force: Boolean = false): List<Hole> =
+        HtmlParser.parseHoles(page("/holes", force))
+
+    suspend fun holeInfo(name: String, force: Boolean = false): Hole? =
+        HtmlParser.parseHoleHeader(page("/h/$name", force))
+
+    suspend fun users(force: Boolean = false): List<SiteUser> =
+        HtmlParser.parseUsers(page("/users", force))
+
+    suspend fun profile(name: String, force: Boolean = false): UserProfile =
+        HtmlParser.parseProfile(page("/@$name", force), name)
+
+    /**
+     * The site's search, one tab at a time: `posts`, `comments` or `users`. The page is
+     * read from its results pane only — see [HtmlParser.parseSearch] for why that matters.
+     */
+    suspend fun search(kind: String, query: String): List<SimpleRow> {
+        val url = HttpUrl.Builder()
+            .scheme("https").host("delidehset.com")
+            .addPathSegment("search")
+            .addPathSegment(kind)
+            .addQueryParameter("q", query)
+            .build()
+        val res = http.get(url.toString())
+        http.updateAntiforgery(HtmlParser.antiforgeryToken(HtmlParser.document(res.body)))
+        return HtmlParser.parseSearch(res.body)
+    }
+
+    suspend fun searchPosts(query: String): List<SimpleRow> = search("posts", query)
+
+    suspend fun searchSuggest(query: String): List<String> {
+        val url = "${DeliHttp.BASE_URL}/api/search/suggest?q=" + java.net.URLEncoder.encode(query, "UTF-8")
+        return runCatching {
+            val res = http.get(url, accept = "application/json")
+            val arr = json.parseToJsonElement(res.body)
+            if (arr is kotlinx.serialization.json.JsonArray) {
+                arr.mapNotNull { el ->
+                    runCatching {
+                        val o = el.jsonObject
+                        (o["name"] ?: o["value"] ?: o["text"] ?: o["label"])?.jsonPrimitive?.content
+                    }.getOrNull()
+                }
+            } else emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun badges(force: Boolean = false): List<BadgeRow> =
+        HtmlParser.parseBadges(page("/badges", force))
+
+    suspend fun table(path: String, force: Boolean = false): TablePage {
+        val html = page(path, force)
+        val rows = HtmlParser.parseRows(html)
+        return TablePage(
+            headers = HtmlParser.parseRowHeaders(html),
+            rows = rows,
+            // Only worth carrying when there is nothing else to show.
+            note = if (rows.isEmpty()) HtmlParser.pageNote(html) else null,
+        )
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Helpers                                                           */
+    /* ------------------------------------------------------------------ */
+
+    private suspend fun ensureAntiforgery() {
+        if (http.currentAntiforgery() == null) {
+            val res = http.get("/")
+            http.updateAntiforgery(HtmlParser.antiforgeryToken(HtmlParser.document(res.body)))
+        }
+    }
+
+    private fun interpret(res: DeliResponse, what: String = "İşlem"): ActionResult =
+        interpretAction(res, what)
+}
+
+/**
+ * The exact body `/comment` expects, built from the form the server rendered.
+ *
+ * The shipped build names the thread field `parent_fullname` and encodes the target as
+ * `p_<post uuid>` for a top-level comment and `c_<comment uuid>` for a reply — the same
+ * values the site's own JavaScript writes into the hidden input it generates. A build
+ * without that field falls back to the older `post_id`/`parent_id` names.
+ */
+internal fun commentFields(
+    form: DiscoveredForm?,
+    postId: String,
+    body: String,
+    parentId: String?,
+    hole: String?,
+): List<Pair<String, String>> {
+    val formFields = form?.fields.orEmpty()
+    val parentField = formFields.firstOrNull { it.name.contains("parent", ignoreCase = true) }?.name
+    val fields = mutableListOf<Pair<String, String>>()
+
+    // Start from the discovered form so hidden fields are preserved.
+    for (f in formFields) {
+        if (f.kind == FieldKind.CHECKBOX && f.value.isEmpty()) continue
+        val value = when (f.name) {
+            form?.bodyField -> body
+            parentField -> if (parentId.isNullOrBlank()) {
+                f.value.ifBlank { "p_$postId" }
+            } else {
+                "c_$parentId"
+            }
+            else -> f.value
+        }
+        fields += f.name to value
+    }
+
+    // Body: use the discovered field name, otherwise the one the reply box posts.
+    if (form?.bodyField == null || formFields.none { it.name == form.bodyField }) {
+        fields += (form?.bodyField ?: "body") to body
+    }
+
+    // Older builds carry no thread field at all: fall back to the usual names.
+    if (parentField == null) {
+        if (parentId != null) fields += "parent_id" to parentId
+        fields += "post_id" to postId
+        if (hole != null) fields += "hole" to hole
+    }
+
+    return fields
+}
+
+/**
+ * Turns whatever a write endpoint answered into a success/failure the UI can show.
+ *
+ * It lives outside the repository because it is the part most likely to be wrong: the
+ * site's endpoints answer with HTTP 200 even when they fail, with the real outcome in a
+ * JSON body (`{error}` or a payload such as `{cid}`).
+ */
+private val actionJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+internal fun interpretAction(res: DeliResponse, what: String = tr("İşlem")): ActionResult {
+    run {
+        if (res.isRedirect) {
+            val loc = res.location.orEmpty()
+            return if (loc.contains("/login")) {
+                ActionResult(false, trf("{0} için oturum açman gerekiyor.", what), res)
+            } else {
+                ActionResult(true, null, res)
+            }
+        }
+
+        if (res.isJson) {
+            val parsed = runCatching {
+                actionJson.parseToJsonElement(res.body).jsonObject
+            }.getOrNull()
+            // The site answers its own JavaScript with `{error}` on failure and a
+            // payload (e.g. `{cid}`) on success — and it does so with HTTP 200, so the
+            // status code alone cannot be trusted.
+            val error = parsed?.let { o ->
+                (o["error"] ?: o["detail"])?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+            }
+            val message = parsed?.let { o ->
+                (o["message"] ?: o["error"] ?: o["detail"])?.jsonPrimitive?.content
+                    ?.takeIf { it.isNotBlank() }
+            }
+            return ActionResult(
+                ok = res.isSuccess && error == null,
+                message = message ?: if (res.isSuccess) null else DeliErrors.explainHttp(res.code, what),
+                raw = res,
+            )
+        }
+
+        // Server rendered error pages: pull out the visible message if there is one.
+        val serverMessage = runCatching {
+            val doc = HtmlParser.document(res.body)
+            doc.select(".invalid-feedback, .alert-danger li, .alert-danger, .validation-summary-errors li, .text-danger")
+                .firstOrNull { it.text().isNotBlank() }
+                ?.text()
+                ?.trim()
+                ?.take(240)
+        }.getOrNull()
+
+        val looksLikeError = res.code >= 400 || serverMessage != null
+        val fallback = HtmlParser.stripTags(res.body).take(240).ifBlank { null }
+
+        return ActionResult(
+            ok = !looksLikeError,
+            message = when {
+                !looksLikeError -> null
+                serverMessage != null -> serverMessage
+                res.code >= 400 -> DeliErrors.explainHttp(res.code, "İşlem")
+                else -> fallback ?: "İşlem tamamlanamadı. Site beta olduğu için arada hata veriyor."
+            },
+            raw = res,
+        )
+    }
+}

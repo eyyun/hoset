@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Design tokens copied from the website's own CSS
+      (css/themes/midnight.css and the inline primary variable on <html>).
+    -->
+    <color name="dd_bg">#0D1117</color>
+    <color name="dd_surface">#161B22</color>
+    <color name="dd_border">#262B32</color>
+    <color name="dd_text">#C9D1D9</color>
+    <color name="dd_primary">#805AD5</color>
+    <color name="dd_upvote">#FD7E14</color>
+    <color name="dd_downvote">#38B2AC</color>
+
+    <!-- The launcher mark sits on the same white field it was drawn on. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>
