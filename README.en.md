@@ -20,7 +20,7 @@
   <a href="LICENSE">MIT license</a>
 </p>
 
-Instead of dropping the site into a plain WebView, Hoset talks to its web endpoints and HTML directly. The feed, posts, profiles, communities and the text and voice chat room all run on native Compose screens.
+Hoset talks to the site's web endpoints and HTML directly. The feed, posts, profiles, communities and the text and voice chat room all run on native Compose screens.
 
 ## Features
 

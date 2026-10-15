@@ -20,7 +20,7 @@
   <a href="LICENSE">MIT lisansı</a>
 </p>
 
-Hoset, siteyi basit bir WebView içine gömmek yerine doğrudan web uç noktaları ve HTML yapısıyla haberleşir. Akış, gönderiler, profil, topluluklar ve sesli/yazılı sohbet odası tamamen yerel (native) Compose arayüzüyle çalışır.
+Hoset, sitenin uç noktalarıyla ve HTML yapısıyla doğrudan haberleşir. Akış, gönderiler, profil, topluluklar ve sesli/yazılı sohbet odası tamamen yerel (native) Compose arayüzüyle çalışır.
 
 ## Özellikler
 
