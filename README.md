@@ -1,6 +1,10 @@
-# Hoset
+<p align="center">
+  <img src="app/src/main/res/drawable-nodpi/logo_hoset.png" width="140" alt="Hoset logosu">
+</p>
 
-**delidehset.com için resmi olmayan Android istemcisi.**
+<h1 align="center">Hoset</h1>
+
+<p align="center"><strong>delidehset.com için resmi olmayan Android istemcisi.</strong></p>
 
 Hoset, siteyi bir WebView'e sıkıştırmaz. Akış, gönderi sayfası, profil, topluluklar, ayarlar ve
 sohbet odası (yazı ve ses) Jetpack Compose ile baştan yazılmıştır; uygulama siteyle, tarayıcının
@@ -83,7 +87,12 @@ app/src/main/java/com/delidehset/mobile/
   bunu kullanıcıya söyler.
 - İki adımlı doğrulama kurulumu QR kod okutmayı gerektirdiği için uygulamada yok, sitede yapılır.
 - Profil fotoğrafının profil sayfasında görünmesi sitenin avatar servisine bağlıdır.
-- Depoda henüz bir lisans dosyası yok.
+
+## Lisans
+
+[MIT](LICENSE) — kodu dilediğin gibi kullanabilir, değiştirebilir ve dağıtabilirsin; tek koşul
+telif ve lisans metnini korumak. Lisans yalnızca bu depodaki kodu kapsar: delidehset.com'un
+adı, içeriği ve verisi üzerinde bir hak vermez.
 
 ## Sorumluluk notu
 
