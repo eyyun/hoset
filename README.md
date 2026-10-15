@@ -11,6 +11,11 @@
 <p align="center">delidehset.com için Jetpack Compose ile geliştirilmiş gayriresmi Android istemcisi.</p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform: Android">
+  <img src="https://img.shields.io/badge/lisans-MIT-3DA639?style=flat-square" alt="lisans: MIT">
+</p>
+
+<p align="center">
   <a href="https://github.com/eyyun/hoset/releases/latest">APK indir</a> ·
   <a href="LICENSE">MIT lisansı</a>
 </p>

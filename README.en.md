@@ -11,6 +11,11 @@
 <p align="center">An unofficial Android client for delidehset.com, written with Jetpack Compose.</p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform: Android">
+  <img src="https://img.shields.io/badge/license-MIT-3DA639?style=flat-square" alt="license: MIT">
+</p>
+
+<p align="center">
   <a href="https://github.com/eyyun/hoset/releases/latest">Download the APK</a> ·
   <a href="LICENSE">MIT license</a>
 </p>
