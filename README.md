@@ -1,4 +1,8 @@
 <p align="center">
+  <b>Türkçe</b> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <img src="app/src/main/res/drawable-nodpi/logo_hoset.png" width="140" alt="Hoset logosu">
 </p>
 
