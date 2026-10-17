@@ -95,6 +95,8 @@ fun DeliScaffold(
     /** The app's own language, for the frame's own lines (the drawer, the bars). */
     lang: AppLang = AppLang.TR,
     floatingActionButton: @Composable () -> Unit = {},
+    /** The drawer's bottom line: the app's version, and the way to ask about a newer one. */
+    drawerFooter: @Composable () -> Unit = {},
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -119,6 +121,7 @@ fun DeliScaffold(
                         scope.launch { drawerState.close() }
                         onLogout()
                     },
+                    footer = drawerFooter,
                 )
             }
         },
@@ -282,6 +285,7 @@ private fun DrawerBody(
     currentRoute: String,
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit,
+    footer: @Composable () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxHeight().padding(vertical = 12.dp)) {
         Row(
@@ -335,6 +339,8 @@ private fun DrawerBody(
                 }
             }
         }
+
+        footer()
 
         HorizontalDivider(color = DeliColors.Border)
 

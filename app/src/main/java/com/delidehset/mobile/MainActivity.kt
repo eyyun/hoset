@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -23,6 +24,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.delidehset.mobile.ui.AppLang
 import com.delidehset.mobile.ui.DeliScaffold
+import com.delidehset.mobile.ui.components.UpdateDialog
+import com.delidehset.mobile.ui.components.UpdateRow
 import com.delidehset.mobile.ui.deliContainer
 import com.delidehset.mobile.ui.translate
 import com.delidehset.mobile.ui.tr
@@ -55,6 +58,8 @@ import com.delidehset.mobile.vm.PostViewModel
 import com.delidehset.mobile.vm.ProfileViewModel
 import com.delidehset.mobile.vm.SearchViewModel
 import com.delidehset.mobile.vm.SubmitViewModel
+import com.delidehset.mobile.vm.UpdateState
+import com.delidehset.mobile.vm.UpdateViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +77,14 @@ private fun DeliRoot() {
     // The app's own language: the frame, the titles and every screen read it from here.
     val lang by appVm.lang.collectAsStateWithLifecycle()
     val appMessage by appVm.message.collectAsStateWithLifecycle()
+
+    // The app updates itself from its own GitHub releases; nothing here goes through a
+    // store, so this is the only way a fix reaches an install that is already out there.
+    val appContext = LocalContext.current.applicationContext
+    val updateVm = deliViewModel { UpdateViewModel(appContext) }
+    val updateState by updateVm.state.collectAsStateWithLifecycle()
+    val updateVisible by updateVm.visible.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { updateVm.maybeCheckOnLaunch() }
 
     val snackbar = remember { SnackbarHostState() }
     val nav = rememberNavController()
@@ -118,6 +131,15 @@ private fun DeliRoot() {
             }
         },
         snackbarHostState = snackbar,
+        drawerFooter = {
+            UpdateRow(
+                version = BuildConfig.VERSION_NAME,
+                state = updateState,
+                onCheck = {
+                    if (updateState is UpdateState.Available) updateVm.open() else updateVm.checkNow()
+                },
+            )
+        },
         showBack = showBack,
         onBack = { nav.popBackStack() },
         // Settings live one tap from your own profile's top bar, like every other app.
@@ -412,6 +434,14 @@ private fun DeliRoot() {
         }
     }
 
+    if (updateVisible) {
+        UpdateDialog(
+            state = updateState,
+            onDownload = { updateVm.download() },
+            onRetry = { updateVm.retry() },
+            onDismiss = { updateVm.dismiss() },
+        )
+    }
 }
 
 /**

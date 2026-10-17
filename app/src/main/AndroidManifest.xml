@@ -13,6 +13,13 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!--
+        The app ships itself: updates are a signed APK from its own releases, handed to
+        Android's installer as a session (see ApkInstaller). Without this permission the
+        session cannot be created at all.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
         Backup is off on purpose. The app keeps the delidehset.com session cookies in
         SharedPreferences, and Android auto-backup would upload them to the user's cloud
         backup and restore them on the next install — which made a freshly installed
@@ -49,6 +56,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Where the installer reports back: "confirm", "installed" or why not. -->
+        <receiver
+            android:name=".data.InstallResultReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>
