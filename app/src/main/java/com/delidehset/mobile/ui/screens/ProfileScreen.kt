@@ -51,6 +51,7 @@ import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.components.pullUp
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.ProfileViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * A native `@user` page, laid out the way profile tabs usually are: the picture, the
@@ -98,9 +99,9 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(DeliShapes.card)
                         .background(DeliColors.Surface)
-                        .border(1.dp, DeliColors.Border, RoundedCornerShape(14.dp))
+                        .border(1.dp, DeliColors.Border, DeliShapes.card)
                 ) {
                     Column {
                         // The avatar rides over this banner (see `pullUp` below).
@@ -201,7 +202,7 @@ fun ProfileScreen(
                                 Button(
                                     onClick = onEditProfile,
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(9.dp),
+                                    shape = DeliShapes.control,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = DeliColors.Primary,
                                         contentColor = Color.White,
@@ -249,7 +250,7 @@ fun ProfileScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(9.dp)
-                                        .clip(RoundedCornerShape(5.dp))
+                                        .clip(DeliShapes.small)
                                         .background(DeliColors.SurfaceVariant)
                                 ) {
                                     val fraction = (day.count.toFloat() / max).coerceIn(0.04f, 1f)
@@ -257,7 +258,7 @@ fun ProfileScreen(
                                         modifier = Modifier
                                             .fillMaxWidth(fraction)
                                             .height(9.dp)
-                                            .clip(RoundedCornerShape(5.dp))
+                                            .clip(DeliShapes.small)
                                             .background(
                                                 Brush.horizontalGradient(listOf(DeliColors.Primary, DeliColors.Blue))
                                             )

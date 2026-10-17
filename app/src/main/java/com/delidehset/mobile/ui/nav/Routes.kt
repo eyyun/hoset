@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Hexagon
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Search
@@ -32,6 +33,9 @@ object Routes {
     const val USER = "user"
     const val PAGE = "page"
     const val SETTINGS = "settings"
+
+    /** Where the app's kits are shown, each one previewed as itself. */
+    const val THEMES = "themes"
     const val ACCOUNT = "account"
     const val RANDOM = "random"
     const val CONTACT = "contact"
@@ -110,6 +114,7 @@ val drawerSections: List<DrawerSection> = listOf(
             DrawerItem("Yöneticiler", Routes.page("admins"), Icons.Filled.AdminPanelSettings),
             DrawerItem("Moderasyon kaydı", Routes.page("comments"), Icons.Filled.History),
             DrawerItem("Bize ulaşın", Routes.CONTACT, Icons.Filled.ContactMail),
+            DrawerItem("Tema Mağazası", Routes.THEMES, Icons.Filled.Palette),
             DrawerItem("Ayarlar", Routes.SETTINGS, Icons.Filled.Settings),
         ),
     ),

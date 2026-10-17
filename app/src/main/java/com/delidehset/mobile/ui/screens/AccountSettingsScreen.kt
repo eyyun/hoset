@@ -60,6 +60,7 @@ import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * The signed-in account settings, drawn natively.
@@ -157,7 +158,7 @@ private fun SettingsTabs(current: SettingsTab, onSelect: (SettingsTab) -> Unit) 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DeliColors.Surface, RoundedCornerShape(8.dp))
+            .background(DeliColors.Surface, DeliShapes.control)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -174,7 +175,7 @@ private fun SettingsTabs(current: SettingsTab, onSelect: (SettingsTab) -> Unit) 
 private fun TabButton(text: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(DeliShapes.small)
             .background(if (active) DeliColors.PrimaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(vertical = 9.dp),
@@ -357,7 +358,7 @@ private fun SectionCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp)
-            .background(DeliColors.Surface, RoundedCornerShape(10.dp))
+            .background(DeliColors.Surface, DeliShapes.control)
             .padding(14.dp),
     ) {
         Text(title, color = DeliColors.OnBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -375,7 +376,7 @@ private fun InlineError(text: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0x33F85149), RoundedCornerShape(6.dp))
+            .background(Color(0x33F85149), DeliShapes.small)
             .padding(10.dp),
     ) { Text(text, color = DeliColors.Danger, fontSize = 13.sp) }
 }
@@ -400,7 +401,7 @@ private fun DeliField(
         maxLines = maxLines,
         placeholder = placeholder?.let { { Text(it, color = DeliColors.OnSurfaceVariant) } },
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-        shape = RoundedCornerShape(8.dp),
+        shape = DeliShapes.control,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = DeliColors.Background,
             unfocusedContainerColor = DeliColors.Background,
@@ -421,7 +422,7 @@ private fun DeliDropdown(value: String, options: List<Pair<String, String>>, onS
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(DeliColors.Background, RoundedCornerShape(8.dp))
+                .background(DeliColors.Background, DeliShapes.control)
                 .clickable { open = true }
                 .padding(14.dp),
         ) {

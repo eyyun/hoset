@@ -329,6 +329,38 @@ internal val phrases: List<Phrase> = listOf(
     Phrase("İndirilecek dosya {0} MB. Kurulumu Android'in kendi onay ekranı soracak.", "The download is {0} MB. Android's own screen will ask you to confirm the install.", "Der Download ist {0} MB groß. Android fragt dich vor der Installation.", "La descarga es de {0} MB. Android te pedirá confirmación antes de instalar.", "Le téléchargement fait {0} Mo. Android te demandera de confirmer l'installation.", "O download tem {0} MB. O Android vai pedir confirmação antes de instalar.", "Файл весит {0} МБ. Android спросит подтверждение перед установкой.", "ダウンロードは{0}MBです。インストール前にAndroidが確認します。"),
     Phrase("Kurulumu Android'in kendi onay ekranı soracak.", "Android's own screen will ask you to confirm the install.", "Android fragt dich vor der Installation.", "Android te pedirá confirmación antes de instalar.", "Android te demandera de confirmer l'installation.", "O Android vai pedir confirmação antes de instalar.", "Android спросит подтверждение перед установкой.", "インストール前にAndroidが確認します。"),
     Phrase("İndirdim, sistemin kurulum ekranına verdim. Onaylarsan uygulama kendini yeniden başlatır; oturumun ve ayarların kalır.", "Downloaded, and handed to the system installer. Confirm there and the app restarts itself; your session and settings stay.", "Heruntergeladen und an den System-Installer übergeben. Bestätige dort, und die App startet neu; Sitzung und Einstellungen bleiben.", "Descargada y entregada al instalador del sistema. Confirma allí y la app se reinicia; tu sesión y ajustes se mantienen.", "Téléchargée et confiée à l'installateur du système. Confirme et l'app redémarre ; ta session et tes réglages restent.", "Baixada e entregue ao instalador do sistema. Confirme lá e o app reinicia; sua sessão e ajustes ficam.", "Файл скачан и передан системному установщику. Подтвердите — приложение перезапустится, сеанс и настройки сохранятся.", "ダウンロードしてシステムのインストーラーに渡しました。確認するとアプリが再起動します。ログイン状態と設定は残ります。"),
+
+    /* ------------------------------------------------ the app's own palettes */
+    Phrase("Uygulama Teması", "App theme", "App-Design", "Tema de la app", "Thème de l'app", "Tema do app", "Тема приложения", "アプリのテーマ"),
+    Phrase("Grafit", "Graphite", "Graphit", "Grafito", "Graphite", "Grafite", "Графит", "グラファイト"),
+    Phrase("Kurulu uygulama başka bir anahtarla imzalanmış; Android bu güncellemeyi üstüne yazamaz. Bir kez kaldırıp yeni sürümü kurunca sonrası kendiliğinden gelir.", "The installed app was signed with a different key, so Android cannot write this update over it. Uninstall it once and install the new version — after that the updates arrive on their own.", "Die installierte App wurde mit einem anderen Schlüssel signiert; Android kann dieses Update nicht darüber schreiben. Einmal deinstallieren und die neue Version installieren — danach kommen die Updates von selbst.", "La app instalada está firmada con otra clave, así que Android no puede escribir esta actualización encima. Desinstálala una vez e instala la nueva versión; después las actualizaciones llegan solas.", "L'app installée est signée avec une autre clé, Android ne peut donc pas écrire cette mise à jour par-dessus. Désinstalle-la une fois et installe la nouvelle version ; ensuite les mises à jour arrivent seules.", "O app instalado foi assinado com outra chave, então o Android não pode escrever esta atualização por cima. Desinstale uma vez e instale a nova versão; depois as atualizações chegam sozinhas.", "Установленное приложение подписано другим ключом, поэтому Android не может записать это обновление поверх. Удалите его один раз и установите новую версию — дальше обновления придут сами.", "インストール済みのアプリは別の鍵で署名されているため、Androidはこの更新を上書きできません。一度アンインストールして新しいバージョンを入れてください。以降の更新は自動で届きます。"),
+
+    /* ------------------------------------------------ the theme store */
+    Phrase("Tema Mağazası", "Theme store", "Design-Store", "Tienda de temas", "Boutique de thèmes", "Loja de temas", "Магазин тем", "テーマストア"),
+    Phrase("Seçili", "Selected", "Ausgewählt", "Seleccionado", "Sélectionné", "Selecionado", "Выбрано", "選択中"),
+    Phrase("Uygula", "Apply", "Anwenden", "Aplicar", "Appliquer", "Aplicar", "Применить", "適用"),
+    Phrase("On bir kit, her biri kendi önizlemesiyle", "Eleven kits, each previewed as itself", "Elf Kits, jedes mit eigener Vorschau", "Once kits, cada uno con su vista previa", "Onze kits, chacun avec son aperçu", "Onze kits, cada um com sua prévia", "Одиннадцать наборов, каждый со своим предпросмотром", "11種類のキット、それぞれプレビュー付き"),
+    Phrase("köşe {0} dp", "corners {0} dp", "Ecken {0} dp", "esquinas {0} dp", "coins {0} dp", "cantos {0} dp", "углы {0} dp", "角丸 {0} dp"),
+    Phrase(
+        "{0} kit var. Beğendiğine dokun, uygulama baştan aşağı o renklere ve köşelere geçer.",
+        "{0} kits here. Tap the one you like and the app turns into those colours and corners.",
+        "{0} Kits. Tippe das, das dir gefällt — die App wechselt in dessen Farben und Ecken.",
+        "Hay {0} kits. Toca el que te guste y la app pasa a esos colores y esquinas.",
+        "{0} kits ici. Touche celui qui te plaît et l'app prend ses couleurs et ses coins.",
+        "Há {0} kits. Toque no que gostar e o app assume essas cores e cantos.",
+        "Здесь {0} наборов. Коснитесь понравившегося — приложение примет его цвета и скругления.",
+        "キットは{0}種類。気に入ったものをタップすると、アプリがその色と角丸に切り替わります。",
+    ),
+
+    /* ------------------------------------------------ the kit names */
+    Phrase("Mavi Saat", "Blue hour", "Blaue Stunde", "Hora azul", "Heure bleue", "Hora azul", "Синий час", "ブルーアワー"),
+    Phrase("Çamlık", "Pinewood", "Kiefernwald", "Pinar", "Pinède", "Pinhal", "Сосняк", "松林"),
+    Phrase("Kızıl Ufuk", "Crimson horizon", "Roter Horizont", "Horizonte rojo", "Horizon pourpre", "Horizonte rubro", "Багровый горизонт", "紅の地平"),
+    Phrase("Lila", "Lilac", "Flieder", "Lila", "Lilas", "Lilás", "Сирень", "ライラック"),
+    Phrase("Beyaz Sayfa", "Blank page", "Weiße Seite", "Página blanca", "Page blanche", "Página branca", "Белый лист", "白いページ"),
+    Phrase("Derin Sular", "Deep water", "Tiefes Wasser", "Aguas profundas", "Eaux profondes", "Águas profundas", "Глубокие воды", "深い海"),
+    Phrase("Pamuk Şeker", "Cotton candy", "Zuckerwatte", "Algodón de azúcar", "Barbe à papa", "Algodão-doce", "Сахарная вата", "綿あめ"),
+    Phrase("Neon Gece", "Neon night", "Neonnacht", "Noche de neón", "Nuit néon", "Noite neon", "Неоновая ночь", "ネオンの夜"),
 )
 
 /**

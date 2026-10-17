@@ -30,6 +30,7 @@ import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.tf
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.UpdateState
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * The update prompt, in the app's own shapes.
@@ -174,7 +175,7 @@ fun UpdateRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(DeliShapes.control)
             .clickable { onCheck() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {

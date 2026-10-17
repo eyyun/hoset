@@ -111,11 +111,21 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
                 }
             }.fold(
                 onSuccess = { apk ->
-                    val launched = runCatching { ApkInstaller(appContext).install(apk) }
-                    _state.value = if (launched.isSuccess) {
-                        UpdateState.Ready(info)
-                    } else {
-                        UpdateState.Failed("Güncelleme kurulamadı.")
+                    val installer = ApkInstaller(appContext)
+                    val launched = runCatching {
+                        // Asked before the installer is handed anything: a different signing
+                        // key is the one refusal Android describes as a package conflict,
+                        // and it is worth saying so in words instead of showing that error.
+                        if (installer.signingKeyDiffers(apk)) throw UpdateException("signature")
+                        installer.install(apk)
+                    }
+                    _state.value = when {
+                        launched.isSuccess -> UpdateState.Ready(info)
+                        (launched.exceptionOrNull() as? UpdateException)?.message == "signature" ->
+                            UpdateState.Failed(
+                                "Kurulu uygulama başka bir anahtarla imzalanmış; Android bu güncellemeyi üstüne yazamaz. Bir kez kaldırıp yeni sürümü kurunca sonrası kendiliğinden gelir."
+                            )
+                        else -> UpdateState.Failed("Güncelleme kurulamadı.")
                     }
                 },
                 onFailure = { error ->

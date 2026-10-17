@@ -39,6 +39,7 @@ import com.delidehset.mobile.ui.components.LoadingBox
 import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.SearchViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /** The site's search tabs, in its own order. */
 private val SearchTabs = listOf(
@@ -65,7 +66,7 @@ fun SearchScreen(
                 Text("Ara (ör. 'hole:general')", color = DeliColors.OnSurfaceVariant, fontSize = 14.sp)
             },
             singleLine = true,
-            shape = RoundedCornerShape(8.dp),
+            shape = DeliShapes.control,
             trailingIcon = {
                 IconButton(onClick = { vm.search() }) {
                     Icon(Icons.Filled.Search, contentDescription = "Ara", tint = DeliColors.Primary)

@@ -3,6 +3,7 @@ package com.delidehset.mobile.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,6 +60,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.delidehset.mobile.ui.theme.DeliPalettes
+import com.delidehset.mobile.ui.theme.DeliShapes
+import com.delidehset.mobile.ui.theme.Palette
 import coil.compose.AsyncImage
 import com.delidehset.mobile.data.BadgeRow
 import com.delidehset.mobile.data.DeliHttp
@@ -323,6 +328,11 @@ fun SettingsScreen(
     /** The app's own language, and the way to change it. */
     lang: AppLang = AppLang.TR,
     onLangChange: (AppLang) -> Unit = {},
+    /** The app's own look, and the way to change it — the kits, kept on the device. */
+    theme: Palette = DeliPalettes.fallback,
+    onThemeChange: (Palette) -> Unit = {},
+    /** Opens the store, where every kit is shown with a preview of itself. */
+    onOpenThemeStore: () -> Unit = {},
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -360,7 +370,7 @@ fun SettingsScreen(
                 }
             },
             containerColor = DeliColors.Surface,
-            shape = RoundedCornerShape(12.dp),
+            shape = DeliShapes.card,
         )
     }
 
@@ -384,9 +394,9 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(DeliShapes.card)
                 .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, RoundedCornerShape(12.dp))
+                .border(1.dp, DeliColors.Border, DeliShapes.card)
         ) {
             Column {
                 SettingsRowItem(
@@ -417,9 +427,9 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(DeliShapes.card)
                 .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, RoundedCornerShape(12.dp)),
+                .border(1.dp, DeliColors.Border, DeliShapes.card),
         ) {
             var open by remember { mutableStateOf(false) }
             Row(
@@ -477,6 +487,110 @@ fun SettingsScreen(
             }
         }
 
+        // The app's own look. Ten palettes, laid out as swatches: the colour is the label,
+        // and a list of ten names would say less than the colours do.
+        SettingsSectionTitle(t("Uygulama Teması"))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .background(DeliColors.Surface)
+                .border(1.dp, DeliColors.Border, DeliShapes.card),
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        theme.icon,
+                        contentDescription = null,
+                        tint = theme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(t("Uygulama Teması"), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(t(theme.name), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                    }
+                    Text(
+                        text = tf("{0} / {1}", DeliPalettes.all.indexOf(theme) + 1, DeliPalettes.all.size),
+                        color = DeliColors.OnSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
+
+                HorizontalDivider(color = DeliColors.Border)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    for (option in DeliPalettes.all) {
+                        val active = option.id == theme.id
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clip(DeliShapes.control)
+                                .clickable { onThemeChange(option) }
+                                .padding(4.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(DeliShapes.control)
+                                    .background(option.background)
+                                    .border(
+                                        width = if (active) 2.dp else 1.dp,
+                                        color = if (active) option.primary else DeliColors.Border,
+                                        shape = DeliShapes.control,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                // Three colours say what a palette is: the surface it puts
+                                // text on, and the two it paints with.
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(Modifier.size(9.dp).clip(CircleShape).background(option.surfaceVariant))
+                                    Box(Modifier.size(9.dp).clip(CircleShape).background(option.primary))
+                                    Box(Modifier.size(9.dp).clip(CircleShape).background(option.blue))
+                                }
+                            }
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                text = t(option.name),
+                                color = if (active) DeliColors.Primary else DeliColors.OnSurfaceVariant,
+                                fontSize = 10.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // The kit in force, opening the store where all of them are drawn as themselves.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .background(DeliColors.Surface)
+                .border(1.dp, DeliColors.Border, DeliShapes.card),
+        ) {
+            SettingsRowItem(
+                icon = Icons.Filled.Palette,
+                iconTint = DeliColors.Primary,
+                title = t("Tema Mağazası"),
+                subtitle = t("On bir kit, her biri kendi önizlemesiyle"),
+                onClick = onOpenThemeStore,
+            )
+        }
+
         // Section Title: Session
         SettingsSectionTitle(t("Oturum"))
 
@@ -484,9 +598,9 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(DeliShapes.card)
                 .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, RoundedCornerShape(12.dp))
+                .border(1.dp, DeliColors.Border, DeliShapes.card)
                 .clickable { showLogoutDialog = true }
                 .padding(14.dp),
         ) {
@@ -537,7 +651,7 @@ private fun SettingsRowItem(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(DeliShapes.control)
                 .background(iconTint.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center,
         ) {

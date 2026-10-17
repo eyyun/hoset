@@ -34,6 +34,7 @@ import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.deliViewModel
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.ContactViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * The site's "Bize ulaşın" page, drawn natively.
@@ -82,7 +83,7 @@ fun ContactScreen(
             minLines = 6,
             maxLines = 12,
             placeholder = { Text("Mesajın", color = DeliColors.OnSurfaceVariant) },
-            shape = RoundedCornerShape(8.dp),
+            shape = DeliShapes.control,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = DeliColors.Surface,
                 unfocusedContainerColor = DeliColors.Surface,
@@ -99,7 +100,7 @@ fun ContactScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0x33F85149), RoundedCornerShape(6.dp))
+                    .background(Color(0x33F85149), DeliShapes.small)
                     .padding(10.dp),
             ) { Text(it, color = DeliColors.Danger, fontSize = 13.sp) }
         }

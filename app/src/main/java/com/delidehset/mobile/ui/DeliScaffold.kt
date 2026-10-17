@@ -78,6 +78,7 @@ import com.delidehset.mobile.ui.nav.drawerItems
 import com.delidehset.mobile.ui.nav.drawerSections
 import com.delidehset.mobile.ui.theme.DeliColors
 import kotlinx.coroutines.launch
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -376,7 +377,7 @@ private fun DrawerBody(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(DeliShapes.small)
                         .background(DeliColors.Primary)
                         .clickable { onNavigate(Routes.LOGIN) }
                         .padding(vertical = 10.dp),
@@ -385,7 +386,7 @@ private fun DrawerBody(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(DeliShapes.small)
                         .background(DeliColors.SurfaceVariant)
                         .clickable { onNavigate(Routes.LOGIN + "?mode=signup") }
                         .padding(vertical = 10.dp),
@@ -415,7 +416,7 @@ private fun DrawerRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(DeliShapes.control)
             .background(if (selected) DeliColors.Primary.copy(alpha = 0.15f) else Color.Transparent)
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 10.dp),

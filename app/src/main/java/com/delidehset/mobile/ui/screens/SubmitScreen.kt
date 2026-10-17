@@ -44,6 +44,7 @@ import com.delidehset.mobile.ui.components.LoadingBox
 import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.SubmitViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 @Composable
 fun SubmitScreen(
@@ -104,7 +105,7 @@ fun SubmitScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(DeliColors.Surface, RoundedCornerShape(8.dp))
+                        .background(DeliColors.Surface, DeliShapes.control)
                         .clickable { holeMenu = true }
                         .padding(14.dp)
                 ) {
@@ -141,7 +142,7 @@ fun SubmitScreen(
                 onValueChange = { if (it.length <= 500) title = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Zorunlu", color = DeliColors.OnSurfaceVariant) },
-                shape = RoundedCornerShape(8.dp),
+                shape = DeliShapes.control,
                 colors = submitFieldColors(),
             )
 
@@ -154,7 +155,7 @@ fun SubmitScreen(
                 placeholder = { Text("Bağlantı veya görsel varsa isteğe bağlı", color = DeliColors.OnSurfaceVariant) },
                 minLines = 6,
                 maxLines = 16,
-                shape = RoundedCornerShape(8.dp),
+                shape = DeliShapes.control,
                 colors = submitFieldColors(),
             )
 
@@ -193,7 +194,7 @@ fun SubmitScreen(
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         placeholder = { Text("Aynı gizli değeri kullan", color = DeliColors.OnSurfaceVariant) },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = DeliShapes.control,
                         colors = submitFieldColors(),
                     )
                 }
@@ -204,7 +205,7 @@ fun SubmitScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0x33F85149), RoundedCornerShape(6.dp))
+                        .background(Color(0x33F85149), DeliShapes.small)
                         .padding(10.dp)
                 ) { Text(it, color = DeliColors.Danger, fontSize = 13.sp) }
             }

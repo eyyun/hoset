@@ -42,6 +42,7 @@ import com.delidehset.mobile.ui.components.LoadingBox
 import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.AuthViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 @Composable
 fun LoginScreen(
@@ -81,7 +82,7 @@ fun LoginScreen(
             onValueChange = { username = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(8.dp),
+            shape = DeliShapes.control,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             colors = deliFieldColors(),
         )
@@ -92,7 +93,7 @@ fun LoginScreen(
             onValueChange = { password = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(8.dp),
+            shape = DeliShapes.control,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             colors = deliFieldColors(),
@@ -103,7 +104,7 @@ fun LoginScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0x33F85149), RoundedCornerShape(6.dp))
+                    .background(Color(0x33F85149), DeliShapes.small)
                     .padding(10.dp)
             ) { Text(it, color = DeliColors.Danger, fontSize = 13.sp) }
         }

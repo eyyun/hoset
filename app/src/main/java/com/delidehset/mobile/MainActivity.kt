@@ -46,6 +46,7 @@ import com.delidehset.mobile.ui.screens.RandomScreen
 import com.delidehset.mobile.ui.screens.SearchScreen
 import com.delidehset.mobile.ui.screens.SettingsScreen
 import com.delidehset.mobile.ui.screens.SubmitScreen
+import com.delidehset.mobile.ui.screens.ThemeStoreScreen
 import com.delidehset.mobile.ui.screens.UsersScreen
 import com.delidehset.mobile.ui.screens.WebFrameScreen
 import com.delidehset.mobile.ui.theme.DeliTheme
@@ -72,10 +73,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DeliRoot() {
     val container = deliContainer()
-    val appVm = deliViewModel { AppViewModel(it.repository, it.session, it.lang) }
+    val appVm = deliViewModel { AppViewModel(it.repository, it.session, it.lang, it.theme) }
     val viewer by appVm.viewer.collectAsStateWithLifecycle()
     // The app's own language: the frame, the titles and every screen read it from here.
     val lang by appVm.lang.collectAsStateWithLifecycle()
+    // Likewise the app's own palette, which the colours every screen reads follow.
+    val theme by appVm.theme.collectAsStateWithLifecycle()
     val appMessage by appVm.message.collectAsStateWithLifecycle()
 
     // The app updates itself from its own GitHub releases; nothing here goes through a
@@ -105,6 +108,7 @@ private fun DeliRoot() {
         currentRoute.startsWith("web") ||
         currentRoute.startsWith("account") ||
         currentRoute.startsWith("settings") ||
+        currentRoute.startsWith("themes") ||
         currentRoute.startsWith("contact")
 
     DeliScaffold(
@@ -423,12 +427,23 @@ private fun DeliRoot() {
                     contentPadding = noPad,
                     lang = lang,
                     onLangChange = { appVm.setLang(it) },
+                    theme = theme,
+                    onThemeChange = { appVm.setTheme(it) },
+                    onOpenThemeStore = { nav.navigate(Routes.THEMES) },
                     onLogout = {
                         appVm.logout()
                         clearWebSession()
                         nav.navigate(Routes.FEED) { popUpTo(Routes.FEED) { inclusive = false } }
                     },
                     onOpenSettings = { tab -> nav.navigate("account?tab=$tab") },
+                )
+            }
+
+            composable(Routes.THEMES) {
+                ThemeStoreScreen(
+                    current = theme,
+                    onApply = { appVm.setTheme(it) },
+                    contentPadding = noPad,
                 )
             }
         }
@@ -483,6 +498,7 @@ private fun titleFor(route: String, args: Bundle?): String = when {
     route.startsWith("submit") -> "Gönderi oluştur"
     route.startsWith("login") -> "Oturum aç"
     route.startsWith("settings") -> "Ayarlar"
+    route.startsWith("themes") -> "Tema Mağazası"
     route.startsWith("account") -> "Ayarlar"
     route.startsWith("contact") -> "Bize ulaşın"
     route.startsWith("random") -> "Rastgele"

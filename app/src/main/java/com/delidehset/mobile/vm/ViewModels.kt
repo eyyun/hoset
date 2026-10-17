@@ -20,10 +20,14 @@ import com.delidehset.mobile.data.SecuritySettings
 import com.delidehset.mobile.data.SimpleRow
 import com.delidehset.mobile.data.SiteUser
 import com.delidehset.mobile.data.SessionStore
+import com.delidehset.mobile.data.ThemeStore
 import com.delidehset.mobile.data.UserProfile
 import com.delidehset.mobile.data.Viewer
 import com.delidehset.mobile.ui.AppLang
 import com.delidehset.mobile.ui.CurrentLang
+import com.delidehset.mobile.ui.theme.DeliColors
+import com.delidehset.mobile.ui.theme.DeliPalettes
+import com.delidehset.mobile.ui.theme.Palette
 import com.delidehset.mobile.ui.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +51,7 @@ class AppViewModel(
     private val repo: DeliRepository,
     private val session: SessionStore,
     private val langStore: LangStore,
+    private val themeStore: ThemeStore,
 ) : ViewModel() {
 
     private val _viewer = MutableStateFlow(Viewer(isSignedIn = false))
@@ -68,6 +73,21 @@ class AppViewModel(
         }
     }
 
+    /**
+     * The app's own look. Unlike the language this never goes to the site: the site's theme
+     * setting is the site's, and the app has its own screens, so it has its own palette.
+     */
+    val theme: StateFlow<Palette> = themeStore.theme
+        .map { DeliPalettes.of(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DeliPalettes.fallback)
+
+    fun setTheme(palette: Palette) {
+        // Applied here rather than only through the stored flow, so the tap repaints
+        // immediately instead of one disk read later.
+        DeliColors.apply(palette.id)
+        viewModelScope.launch(Dispatchers.IO) { themeStore.save(palette.id) }
+    }
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -83,6 +103,11 @@ class AppViewModel(
         // the composition, so the chosen language is mirrored where it can see it.
         viewModelScope.launch(Dispatchers.IO) {
             langStore.language.collect { code -> if (!code.isNullOrBlank()) CurrentLang.code = code }
+        }
+        // The stored palette is pushed into the colours the screens read. Collected on the
+        // main dispatcher on purpose: this writes a snapshot state that recomposes the UI.
+        viewModelScope.launch {
+            themeStore.theme.collect { id -> DeliColors.apply(id) }
         }
         refresh()
     }

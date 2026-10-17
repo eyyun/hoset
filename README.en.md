@@ -27,6 +27,7 @@ Hoset talks to the site's web endpoints and HTML directly. The feed, posts, prof
 - **Feed and posts:** popular and top listings, community feeds, effortpost filtering, voting, comments, posting anonymously or with a tripcode, deleting and reporting posts.
 - **Chat room (text and voice):** live chat over a small background WebSocket bridge ([ChatBridge](app/src/main/java/com/delidehset/mobile/data/ChatBridge.kt)). The interface, audio and microphone handling are all native.
 - **Profile and account settings:** avatar and banner upload with automatic resizing, bio, pronouns, theme, password and e-mail updates, and active session management.
+- **Theme store:** eleven looks (Hoset, Mavi Saat, Çamlık, Kızıl Ufuk, Lila, Beyaz Sayfa, Grafit, Derin Sular, Pamuk Şeker, cuteeee, Neon Gece). A kit changes colours, corner radii and title weight together, and the store shows each one as a miniature of the app itself; the choice is kept on the device.
 - **Updates itself:** once a day the app checks the GitHub releases; when a newer one is out it downloads the signed APK, verifies its SHA-256 digest and hands it to Android's own confirmation screen. As long as the signing key stays the same, the session and the settings survive the update.
 
 ## Build and install

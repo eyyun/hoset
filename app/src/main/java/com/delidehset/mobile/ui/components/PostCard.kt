@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import com.delidehset.mobile.data.FeedPost
 import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.theme.DeliColors
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * The native twin of an `article.feed-card`:
@@ -80,7 +81,7 @@ fun PostCard(
                 Spacer(Modifier.width(8.dp))
                 Box(
                     Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(DeliShapes.small)
                         .background(DeliColors.Danger)
                         .padding(horizontal = 5.dp, vertical = 1.dp)
                 ) { Text("NSFW", color = androidx.compose.ui.graphics.Color.White, fontSize = 10.sp) }
@@ -123,7 +124,7 @@ fun PostCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(6.dp)),
+                    .clip(DeliShapes.small),
                 contentScale = ContentScale.Crop,
             )
         }

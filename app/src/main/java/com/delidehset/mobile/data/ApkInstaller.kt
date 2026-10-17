@@ -4,7 +4,9 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.os.Build
 import com.delidehset.mobile.ui.tr
 import java.io.File
@@ -18,6 +20,53 @@ import java.io.File
  * browser, no "unknown sources" toggle to hunt for.
  */
 class ApkInstaller(private val context: Context) {
+
+    /**
+     * True when Android will refuse this APK because it is signed with another key.
+     *
+     * The platform only says "package conflicts with an existing package", which reads
+     * like the app is broken instead of explaining that the installed copy came from a
+     * different signing key (a debug build, say). Asking first means the updater can say
+     * what actually happened — and that the answer is one uninstall, not a broken update.
+     */
+    fun signingKeyDiffers(apk: File): Boolean {
+        val installed = certDigests(installedInfo())
+        val incoming = certDigests(archiveInfo(apk))
+        if (installed == null || incoming == null) return false
+        return installed != incoming
+    }
+
+    private fun signatureFlags(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        }
+
+    @Suppress("DEPRECATION")
+    private fun installedInfo(): PackageInfo? = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, signatureFlags())
+    }.getOrNull()
+
+    @Suppress("DEPRECATION")
+    private fun archiveInfo(apk: File): PackageInfo? = runCatching {
+        context.packageManager.getPackageArchiveInfo(apk.absolutePath, signatureFlags())
+    }.getOrNull()
+
+    /** The SHA-256 of every signer certificate, sorted, so two sets can be compared. */
+    @Suppress("DEPRECATION")
+    private fun certDigests(info: PackageInfo?): List<String>? = runCatching {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info?.signingInfo?.apkContentsSigners
+        } else {
+            info?.signatures
+        }
+        signatures?.map { sha256(it.toByteArray()) }?.sorted()
+    }.getOrNull()
+
+    private fun sha256(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
 
     fun install(apk: File) {
         val installer = context.packageManager.packageInstaller

@@ -28,6 +28,7 @@ Hoset, sitenin uç noktalarıyla ve HTML yapısıyla doğrudan haberleşir. Akı
 - **Sohbet Odası (Yazı ve Ses):** Arka planda çalışan hafif bir WebSocket köprüsü ([ChatBridge](app/src/main/java/com/delidehset/mobile/data/ChatBridge.kt)) üzerinden sesli ve yazılı sohbet. Arayüz ve ses/mikrofon yönetimi tamamen yerel bileşenlerle kontrol edilir.
 - **Profil ve Hesap Ayarları:** Profil fotoğrafı ve banner yükleme (otomatik boyutlandırma ile), biyografi, zamirler, tema seçimi, şifre/e-posta güncelleme ve aktif oturum yönetimi.
 - **Çoklu Dil Desteği:** Sitenin desteklediği 8 dil (`tr, en, de, es, fr, pt-br, ru, ja`) uygulama içinden seçilebilir ve hem istemciyi hem site dilini senkronize eder.
+- **Tema Mağazası:** On bir görünüm paketi (Hoset, Mavi Saat, Çamlık, Kızıl Ufuk, Lila, Beyaz Sayfa, Grafit, Derin Sular, Pamuk Şeker, cuteeee, Neon Gece). Her paket renkleri, köşe yuvarlaklığını ve başlık ağırlığını birlikte değiştirir; mağaza her birini uygulamanın kendi minyatür önizlemesiyle gösterir, seçim cihazda saklanır.
 - **Kendi Kendini Güncelleme:** Uygulama günde bir kez GitHub sürümlerini denetler; yeni sürüm varsa imzalı APK'yı indirir, SHA-256 özetini doğrular ve kurulumu Android'in kendi onay ekranına verir. Aynı imza kaldığı sürece oturum ve ayarlar korunur.
 
 ## Kurulum ve Derleme

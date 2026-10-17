@@ -46,6 +46,7 @@ import coil.request.ImageRequest
 import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.nameColor
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * A user avatar. When the account has no picture — which on this beta is more often than
@@ -157,9 +158,9 @@ fun DeliCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(DeliShapes.control)
             .background(DeliColors.Surface)
-            .border(1.dp, DeliColors.Border, RoundedCornerShape(8.dp))
+            .border(1.dp, DeliColors.Border, DeliShapes.control)
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
     ) {
         Column(modifier = Modifier.padding(12.dp)) { content() }
@@ -351,7 +352,7 @@ fun DeliButtonPrimary(text: String, enabled: Boolean = true, onClick: () -> Unit
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(6.dp),
+        shape = DeliShapes.small,
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
             containerColor = DeliColors.Primary,
             contentColor = androidx.compose.ui.graphics.Color.White,
@@ -365,7 +366,7 @@ fun DeliOutlinedButton(text: String, enabled: Boolean = true, onClick: () -> Uni
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(6.dp),
+        shape = DeliShapes.small,
         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
             contentColor = DeliColors.OnBackground,
         ),

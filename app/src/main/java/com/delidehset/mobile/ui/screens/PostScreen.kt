@@ -58,6 +58,7 @@ import com.delidehset.mobile.ui.components.ThinDivider
 import com.delidehset.mobile.ui.components.VoteArrows
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.PostViewModel
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 @Composable
 fun PostScreen(
@@ -151,7 +152,7 @@ fun PostScreen(
                             AsyncImage(
                                 model = img,
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                                modifier = Modifier.fillMaxWidth().clip(DeliShapes.control),
                                 contentScale = ContentScale.FillWidth,
                             )
                         }
@@ -224,7 +225,7 @@ fun PostScreen(
                             minLines = 2,
                             maxLines = 8,
                             placeholder = { Text("Bir yanıt yaz…", color = DeliColors.OnSurfaceVariant) },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = DeliShapes.control,
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = DeliColors.Surface,
                                 unfocusedContainerColor = DeliColors.Surface,
@@ -247,7 +248,7 @@ fun PostScreen(
                             } else {
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .clip(DeliShapes.small)
                                         .background(if (state.sending) DeliColors.SurfaceVariant else DeliColors.Primary)
                                         .clickable(enabled = !state.sending && replyText.isNotBlank()) {
                                             vm.sendComment(replyText)
@@ -349,7 +350,7 @@ private fun CommentRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = (depth.coerceAtMost(6) * 14).dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(DeliShapes.control)
             .background(DeliColors.Surface)
             .padding(10.dp),
     ) {
@@ -377,7 +378,7 @@ private fun CommentRow(
                 AsyncImage(
                     model = img,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)),
+                    modifier = Modifier.fillMaxWidth().clip(DeliShapes.small),
                     contentScale = ContentScale.FillWidth,
                 )
             }

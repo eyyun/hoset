@@ -8,6 +8,7 @@ import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.data.DeliRepository
 import com.delidehset.mobile.data.LangStore
 import com.delidehset.mobile.data.SessionStore
+import com.delidehset.mobile.data.ThemeStore
 import okhttp3.OkHttpClient
 
 class AppContainer(context: Context) {
@@ -19,6 +20,9 @@ class AppContainer(context: Context) {
 
     /** The app's own language, which the site's setting never touched. */
     val lang = LangStore(context)
+
+    /** The app's own look, likewise kept apart from the site's theme setting. */
+    val theme = ThemeStore(context)
 
     /** Memory + disk cache so a slow page is only slow the first time. */
     val cache = DeliCache(context)

@@ -42,6 +42,7 @@ import com.delidehset.mobile.ui.components.PostCard
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.FeedViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,7 +87,7 @@ fun FeedScreen(
                 val selected = state.sort == sort
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(DeliShapes.small)
                         .background(if (selected) DeliColors.Primary else DeliColors.SurfaceVariant)
                         .clickable { vm.setSort(sort) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)

@@ -91,6 +91,7 @@ import com.delidehset.mobile.ui.theme.nameColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.delidehset.mobile.ui.theme.parseCssColor
+import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * The chat room, drawn entirely natively: message list, avatars, reactions, online count,
@@ -749,9 +750,9 @@ private fun VoiceControl(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(9.dp))
+            .clip(DeliShapes.control)
             .background(if (active) DeliColors.Primary.copy(alpha = 0.22f) else DeliColors.Surface)
-            .border(1.dp, if (active) DeliColors.Primary.copy(alpha = 0.5f) else DeliColors.Border, RoundedCornerShape(9.dp))
+            .border(1.dp, if (active) DeliColors.Primary.copy(alpha = 0.5f) else DeliColors.Border, DeliShapes.control)
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -874,7 +875,7 @@ private fun ChatRow(message: ChatMessage, own: Boolean, startsTurn: Boolean) {
                     contentDescription = null,
                     modifier = Modifier
                         .width(180.dp)
-                        .clip(RoundedCornerShape(6.dp)),
+                        .clip(DeliShapes.small),
                 )
             }
             if (message.reactions.isNotEmpty()) {
@@ -943,9 +944,9 @@ private fun Composer(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(DeliShapes.card)
                 .background(DeliColors.Background)
-                .border(1.dp, DeliColors.Border, RoundedCornerShape(16.dp))
+                .border(1.dp, DeliColors.Border, DeliShapes.card)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             if (draft.isEmpty()) {
