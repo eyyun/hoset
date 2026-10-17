@@ -27,7 +27,7 @@ Hoset talks to the site's web endpoints and HTML directly. The feed, posts, prof
 - **Feed and posts:** popular and top listings, community feeds, effortpost filtering, voting, comments, posting anonymously or with a tripcode, deleting and reporting posts.
 - **Chat room (text and voice):** live chat over a small background WebSocket bridge ([ChatBridge](app/src/main/java/com/delidehset/mobile/data/ChatBridge.kt)). The interface, audio and microphone handling are all native.
 - **Profile and account settings:** avatar and banner upload with automatic resizing, bio, pronouns, theme, password and e-mail updates, and active session management.
-- **Multiple languages:** all eight languages the site supports (`tr, en, de, es, fr, pt-br, ru, ja`) can be picked inside the app, and the choice keeps the client and the site in sync.
+- **Updates itself:** once a day the app checks the GitHub releases; when a newer one is out it downloads the signed APK, verifies its SHA-256 digest and hands it to Android's own confirmation screen. As long as the signing key stays the same, the session and the settings survive the update.
 
 ## Build and install
 
@@ -48,6 +48,8 @@ Requirements: **JDK 17** and the **Android SDK** (`compileSdk 35`, `minSdk 26`).
    ```
 
 > If `keystore.properties` exists the release APK is signed with that key, otherwise it falls back to the debug key.
+
+Releases are distributed through GitHub Releases, and the key that signs the APK has to stay the same from one release to the next: otherwise the update cannot be written over an installed app. Once a release is published the app finds it on its own — no store involved.
 
 ## Translations
 

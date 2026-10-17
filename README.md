@@ -28,6 +28,7 @@ Hoset, sitenin uç noktalarıyla ve HTML yapısıyla doğrudan haberleşir. Akı
 - **Sohbet Odası (Yazı ve Ses):** Arka planda çalışan hafif bir WebSocket köprüsü ([ChatBridge](app/src/main/java/com/delidehset/mobile/data/ChatBridge.kt)) üzerinden sesli ve yazılı sohbet. Arayüz ve ses/mikrofon yönetimi tamamen yerel bileşenlerle kontrol edilir.
 - **Profil ve Hesap Ayarları:** Profil fotoğrafı ve banner yükleme (otomatik boyutlandırma ile), biyografi, zamirler, tema seçimi, şifre/e-posta güncelleme ve aktif oturum yönetimi.
 - **Çoklu Dil Desteği:** Sitenin desteklediği 8 dil (`tr, en, de, es, fr, pt-br, ru, ja`) uygulama içinden seçilebilir ve hem istemciyi hem site dilini senkronize eder.
+- **Kendi Kendini Güncelleme:** Uygulama günde bir kez GitHub sürümlerini denetler; yeni sürüm varsa imzalı APK'yı indirir, SHA-256 özetini doğrular ve kurulumu Android'in kendi onay ekranına verir. Aynı imza kaldığı sürece oturum ve ayarlar korunur.
 
 ## Kurulum ve Derleme
 
@@ -48,6 +49,8 @@ Gereksinimler: **JDK 17** ve **Android SDK** (`compileSdk 35`, `minSdk 26`).
    ```
 
 > Not: `keystore.properties` tanımlıysa release APK bu anahtarla, tanımlı değilse varsayılan debug anahtarıyla imzalanır.
+
+Sürümler GitHub Releases üzerinden dağıtılır ve APK'yı imzalayan anahtar sürümden sürüme aynı kalmalıdır: aksi halde kurulu uygulamanın üzerine güncelleme yazılamaz. Sürüm yayınlandıktan sonra uygulama yeni sürümü kendisi bulur — mağaza gerekmez.
 
 ## Çeviri ve Dil Sistemi
 
