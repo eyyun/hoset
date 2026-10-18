@@ -35,3 +35,7 @@ AGENTS.md
 # on this machine unless someone deliberately decides to publish them.
 SITE-AUDIT.md
 SITE-AUDIT-DEEP.md
+
+# Sürüm notları sürüm sayfasında ve CHANGELOG.md'de durur; her sürüm için ayrı dosya
+# depoyu dolduruyordu. Yeni notlar bu makinede kalır.
+RELEASE-NOTES-*.md
