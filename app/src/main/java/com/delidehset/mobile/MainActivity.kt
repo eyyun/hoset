@@ -192,6 +192,35 @@ private fun DeliRoot() {
             navController = nav,
             startDestination = Routes.FEED,
             modifier = Modifier.fillMaxSize().padding(padding),
+            // Screens slide in the way the sheet under them suggests: forward pushes
+            // come from the right, going back leaves to the right. Short durations and a
+            // small travel keep a fast app feeling fast.
+            enterTransition = {
+                androidx.compose.animation.slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(220),
+                    initialOffsetX = { it / 6 },
+                ) + androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(180)
+                )
+            },
+            exitTransition = {
+                androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(140)
+                )
+            },
+            popEnterTransition = {
+                androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(180)
+                )
+            },
+            popExitTransition = {
+                androidx.compose.animation.slideOutHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(200),
+                    targetOffsetX = { it / 8 },
+                ) + androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(160)
+                )
+            },
         ) {
             val noPad = PaddingValues(0.dp)
 
@@ -241,6 +270,7 @@ private fun DeliRoot() {
                     onOpenHole = { nav.navigate("feed/$it") },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
                     onMessage = { appVm.showMessage(it) },
+                    onOpenSubmit = { hole -> nav.navigate(Routes.submit(hole)) },
                 )
             }
 
@@ -287,7 +317,13 @@ private fun DeliRoot() {
                 )
             }
 
-            composable(Routes.SUBMIT) {
+            composable(
+                route = Routes.SUBMIT_PATTERN,
+                arguments = listOf(navArgument("hole") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }),
+            ) { entry ->
                 val vm = deliViewModel { SubmitViewModel(it.repository) }
                 SubmitScreen(
                     vm = vm,
@@ -296,6 +332,7 @@ private fun DeliRoot() {
                     onSubmitted = { nav.navigate(Routes.FEED) { launchSingleTop = true } },
                     onMessage = { appVm.showMessage(it) },
                     onOpenLogin = { nav.navigate(Routes.LOGIN) },
+                    initialHole = entry.arguments?.getString("hole")?.takeIf { it.isNotBlank() },
                 )
             }
 
@@ -378,9 +415,11 @@ private fun DeliRoot() {
                     isSelf = name.isNotBlank() && name.equals(viewer.username, ignoreCase = true),
                     contentPadding = noPad,
                     onEditProfile = { nav.navigate(Routes.account("personal")) },
-                    // Follower lists and the profile's other tabs are pages the site
-                    // renders better than a native screen could; they open in the frame.
+                    // Follower lists are still the site's own pages; the profile's tabs
+                    // and every post in them are drawn by the app.
                     onOpenPath = { path, title -> nav.navigate(Routes.web(path, title)) },
+                    onOpenPost = { nav.navigate(Routes.post(it)) },
+                    onOpenUser = { nav.navigate(Routes.user(it)) },
                     onMessage = { appVm.showMessage(it) },
                 )
             }
@@ -408,6 +447,7 @@ private fun DeliRoot() {
                         viewerName = viewer.username,
                         contentPadding = noPad,
                         onOpenLogin = { nav.navigate(Routes.LOGIN) },
+                        onOpenUser = { nav.navigate(Routes.user(it)) },
                     )
                     else -> PageScreen(
                         kind = kind,
@@ -459,7 +499,10 @@ private fun DeliRoot() {
                 NotificationsScreen(
                     vm = notificationsVm,
                     contentPadding = noPad,
-                    onOpenPost = { href -> nav.navigate(Routes.web(href, "Gönderi")) },
+                    // The row's link is `/post/<uuid>[/comment/<id>]`, and the site serves
+                    // that post page at that very path — so the app can read it natively
+                    // instead of handing the person a browser.
+                    onOpenPost = { href -> nav.navigate(Routes.post(href.substringBefore("/comment/"))) },
                     onChanged = { notificationsVm.unread { unreadNotifications = it } },
                 )
             }
@@ -494,6 +537,8 @@ private fun DeliRoot() {
                 ThemeStoreScreen(
                     current = theme,
                     onApply = { appVm.setTheme(it) },
+                    onSaveCustom = { appVm.saveCustomTheme(it) },
+                    onDeleteCustom = { appVm.deleteCustomTheme(it) },
                     contentPadding = noPad,
                 )
             }
@@ -574,7 +619,7 @@ private fun titleFor(route: String, args: Bundle?): String = when {
         "users" -> "Kullanıcılar"
         "badges" -> "Rozetler"
         "contact" -> "Bize ulaşın"
-        else -> "Hoset"
+        else -> com.delidehset.mobile.data.HosetPrefs.appTitleState.value
     }
-    else -> "Hoset"
+    else -> com.delidehset.mobile.data.HosetPrefs.appTitleState.value
 }

@@ -8,15 +8,6 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
-import androidx.compose.material.icons.filled.NotificationsActive
-import com.delidehset.mobile.notify.HosetNotifications
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,20 +24,38 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,9 +66,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.delidehset.mobile.BuildConfig
 import com.delidehset.mobile.R
+import com.delidehset.mobile.data.FeedSort
+import com.delidehset.mobile.data.HosetPrefs
+import com.delidehset.mobile.data.LauncherVariant
+import com.delidehset.mobile.notify.HosetNotifications
 import com.delidehset.mobile.ui.Text
+import com.delidehset.mobile.ui.deliContainer
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
 import com.delidehset.mobile.ui.theme.DeliColors
@@ -71,10 +86,6 @@ import com.delidehset.mobile.vm.UpdateState
 
 /**
  * Hoset's own settings: the things that belong to this app rather than to the account.
- *
- * The account settings next door change what the site stores (bio, password, language);
- * this page changes what the install is — its look, whether it checks for a new version,
- * and what it is and is not (an unofficial client, MIT licensed, source on GitHub).
  */
 @Composable
 fun HosetSettingsScreen(
@@ -85,8 +96,22 @@ fun HosetSettingsScreen(
     onCheckUpdates: () -> Unit,
 ) {
     val context = LocalContext.current
+    val container = deliContainer()
     var enabled by remember { mutableStateOf(HosetNotifications.enabled(context)) }
     var permitted by remember { mutableStateOf(hasNotificationPermission(context)) }
+    var appTitle by remember { mutableStateOf(HosetPrefs.appTitle(context)) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var launcher by remember { mutableStateOf(HosetPrefs.launcherVariant(context)) }
+    var showIconDialog by remember { mutableStateOf(false) }
+    var fontScale by remember { mutableFloatStateOf(HosetPrefs.fontScale(context)) }
+    var showFontDialog by remember { mutableStateOf(false) }
+    var defaultSort by remember { mutableStateOf(HosetPrefs.defaultSort(context)) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var hideNsfw by remember { mutableStateOf(HosetPrefs.hideNsfwMedia(context)) }
+    var compactFeed by remember { mutableStateOf(HosetPrefs.compactFeed(context)) }
+    var autoUpdate by remember { mutableStateOf(HosetPrefs.autoUpdate(context)) }
+    var cacheCleared by remember { mutableStateOf(false) }
+
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permitted = granted
         if (granted) {
@@ -113,7 +138,6 @@ fun HosetSettingsScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // The app's own mark and version, the way an about screen opens.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,7 +152,7 @@ fun HosetSettingsScreen(
             )
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("Hoset", color = DeliColors.OnBackground, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(appTitle, color = DeliColors.OnBackground, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = tf("Sürüm {0} (yapı {1})", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
@@ -150,26 +174,83 @@ fun HosetSettingsScreen(
                 icon = Icons.Filled.Palette,
                 tint = theme.primary,
                 title = t("Tema Mağazası"),
-                subtitle = tf("{0} kit içinden {1}", DeliPalettes.all.size, t(theme.name)),
+                subtitle = tf("{0} kit içinden {1}", DeliPalettes.available.size, t(theme.name)),
                 onClick = onOpenThemeStore,
             )
 
             HorizontalDivider(color = DeliColors.Border)
 
             HosetRow(
-                icon = Icons.Filled.Refresh,
+                icon = Icons.Filled.Edit,
+                tint = DeliColors.Primary,
+                title = t("Uygulama adı"),
+                subtitle = appTitle,
+                onClick = { showNameDialog = true },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.AppShortcut,
                 tint = DeliColors.Blue,
-                title = t("Güncellemeyi denetle"),
-                subtitle = when (val state = updateState) {
-                    is UpdateState.Downloading -> tf("İndiriliyor… %{0}", (state.progress * 100).toInt())
-                    is UpdateState.Available -> tf("Yeni sürüm {0} hazır.", state.info.version)
-                    is UpdateState.UpToDate -> t("En son sürümü kullanıyorsun.")
-                    is UpdateState.Checking -> t("Denetleniyor…")
-                    is UpdateState.Ready -> t("Kurulum açıldı")
-                    is UpdateState.Failed -> state.message
-                    UpdateState.Idle -> t("Güncellemeler GitHub sürümlerinden gelir.")
+                title = t("Simge ve kısayol"),
+                subtitle = t(launcher.label) + " · " + t(launcher.subtitle),
+                onClick = { showIconDialog = true },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.FormatSize,
+                tint = DeliColors.Success,
+                title = t("Yazı boyutu"),
+                subtitle = "%${(fontScale * 100).toInt()}",
+                onClick = { showFontDialog = true },
+            )
+        }
+
+        SettingsGroupTitle(t("Akış & İçerik"))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .kitSurface(padding = 0.dp),
+        ) {
+            HosetRow(
+                icon = Icons.Filled.Sort,
+                tint = DeliColors.Primary,
+                title = t("Varsayılan sıralama"),
+                subtitle = defaultSort.label,
+                onClick = { showSortDialog = true },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.ViewAgenda,
+                tint = DeliColors.Blue,
+                title = t("Sıkışık akış görünümü"),
+                subtitle = t("Önizleme metinlerini ve büyük görselleri gizler."),
+                checked = compactFeed,
+                onToggle = {
+                    compactFeed = it
+                    HosetPrefs.setCompactFeed(context, it)
                 },
-                onClick = onCheckUpdates,
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.VisibilityOff,
+                tint = DeliColors.Danger,
+                title = t("NSFW medyayı gizle"),
+                subtitle = t("NSFW etiketli gönderilerin görsellerini akışta göstermez."),
+                checked = hideNsfw,
+                onToggle = {
+                    hideNsfw = it
+                    HosetPrefs.setHideNsfwMedia(context, it)
+                },
             )
         }
 
@@ -197,6 +278,59 @@ fun HosetSettingsScreen(
                         HosetNotifications.setEnabled(context, want)
                         enabled = want
                     }
+                },
+            )
+        }
+
+        SettingsGroupTitle(t("Depolama ve Güncelleme"))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .kitSurface(padding = 0.dp),
+        ) {
+            HosetToggleRow(
+                icon = Icons.Filled.Refresh,
+                tint = DeliColors.Success,
+                title = t("Otomatik güncelleme denetimi"),
+                subtitle = t("Açılışta günde bir kez yeni sürüm var mı bakar."),
+                checked = autoUpdate,
+                onToggle = {
+                    autoUpdate = it
+                    HosetPrefs.setAutoUpdate(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.Refresh,
+                tint = DeliColors.Blue,
+                title = t("Güncellemeyi denetle"),
+                subtitle = when (val state = updateState) {
+                    is UpdateState.Downloading -> tf("İndiriliyor… %{0}", (state.progress * 100).toInt())
+                    is UpdateState.Available -> tf("Yeni sürüm {0} hazır.", state.info.version)
+                    is UpdateState.UpToDate -> t("En son sürümü kullanıyorsun.")
+                    is UpdateState.Checking -> t("Denetleniyor…")
+                    is UpdateState.Ready -> t("Kurulum açıldı")
+                    is UpdateState.Failed -> state.message
+                    UpdateState.Idle -> t("Güncellemeler GitHub sürümlerinden gelir.")
+                },
+                onClick = onCheckUpdates,
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.DeleteSweep,
+                tint = DeliColors.Warning,
+                title = t("Önbelleği temizle"),
+                subtitle = if (cacheCleared) t("Sayfa ve görsel önbelleği temizlendi.") else t("Kayıtlı sayfa ve görsel önbelleğini sıfırlar."),
+                onClick = {
+                    container.cache.clear()
+                    container.forgetImages()
+                    cacheCleared = true
                 },
             )
         }
@@ -260,14 +394,150 @@ fun HosetSettingsScreen(
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                // One literal, not two: the dictionary is keyed by the whole line, and a
-                // sentence split across `+` is two lines it cannot find.
                 text = t("Bu uygulama delidehset.com'un resmi istemcisi değildir; sitenin herkese açık sayfalarını okuyan, gönüllü yazılmış bir istemcidir."),
                 color = DeliColors.OnSurfaceVariant,
                 fontSize = 12.5.sp,
                 lineHeight = 18.sp,
             )
         }
+    }
+
+    if (showNameDialog) {
+        var draft by remember { mutableStateOf(appTitle) }
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            containerColor = DeliColors.Surface,
+            title = { Text(t("Uygulama adı"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it.take(24) },
+                    singleLine = true,
+                    placeholder = { Text("Hoset", color = DeliColors.OnSurfaceVariant) },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = DeliColors.Background,
+                        unfocusedContainerColor = DeliColors.Background,
+                        focusedTextColor = DeliColors.OnBackground,
+                        unfocusedTextColor = DeliColors.OnBackground,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        HosetPrefs.setAppTitle(context, draft)
+                        appTitle = HosetPrefs.appTitle(context)
+                        showNameDialog = false
+                    }
+                ) { Text(t("Kaydet"), color = DeliColors.Primary, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) { Text(t("Vazgeç"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
+    }
+
+    if (showIconDialog) {
+        AlertDialog(
+            onDismissRequest = { showIconDialog = false },
+            containerColor = DeliColors.Surface,
+            title = { Text(t("Simge ve kısayol"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (variant in LauncherVariant.entries) {
+                        val active = variant == launcher
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(DeliShapes.control)
+                                .background(if (active) DeliColors.PrimaryContainer else DeliColors.Background)
+                                .clickable {
+                                    launcher = variant
+                                    HosetPrefs.setLauncherVariant(context, variant)
+                                    showIconDialog = false
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(t(variant.label), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(t(variant.subtitle), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showIconDialog = false }) { Text(t("Kapat"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
+    }
+
+    if (showFontDialog) {
+        val options = listOf(0.9f to "%90", 1.0f to "%100", 1.1f to "%110", 1.2f to "%120")
+        AlertDialog(
+            onDismissRequest = { showFontDialog = false },
+            containerColor = DeliColors.Surface,
+            title = { Text(t("Yazı boyutu"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for ((scale, label) in options) {
+                        val active = kotlin.math.abs(fontScale - scale) < 0.03f
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(DeliShapes.control)
+                                .background(if (active) DeliColors.PrimaryContainer else DeliColors.Background)
+                                .clickable {
+                                    fontScale = scale
+                                    HosetPrefs.setFontScale(context, scale)
+                                    showFontDialog = false
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(label, color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFontDialog = false }) { Text(t("Kapat"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
+    }
+
+    if (showSortDialog) {
+        AlertDialog(
+            onDismissRequest = { showSortDialog = false },
+            containerColor = DeliColors.Surface,
+            title = { Text(t("Varsayılan sıralama"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (sort in FeedSort.entries) {
+                        val active = sort == defaultSort
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(DeliShapes.control)
+                                .background(if (active) DeliColors.PrimaryContainer else DeliColors.Background)
+                                .clickable {
+                                    defaultSort = sort
+                                    HosetPrefs.setDefaultSort(context, sort)
+                                    showSortDialog = false
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(sort.label, color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSortDialog = false }) { Text(t("Kapat"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
     }
 }
 

@@ -6,6 +6,8 @@
         you sign in with, the server that is slow, …).
     -->
     <string name="app_name">Hoset</string>
+    <string name="app_name_deli">Delidehşet</string>
+    <string name="app_name_dd">DD</string>
 
     <!-- The channel Android shows in its own settings screen. -->
     <string name="notification_channel">Bildirimler</string>

@@ -278,7 +278,7 @@ fun DeliScaffold(
                         },
                         icon = {
                             if (viewer.isSignedIn) {
-                                DeliAvatar(url = viewer.avatarUrl, size = 24.dp)
+                                DeliAvatar(url = viewer.avatarUrl, size = 24.dp, name = viewer.username)
                             } else {
                                 Icon(Icons.Filled.Person, contentDescription = translate(lang, "Profil"))
                             }
@@ -299,6 +299,11 @@ fun DeliScaffold(
             // by the keyboard *plus* the bar, which is what left a strip of empty space
             // between a composer and the keyboard.
             val density = LocalDensity.current
+            val fontScale = com.delidehset.mobile.data.HosetPrefs.fontScaleState.floatValue
+            val scaledDensity = androidx.compose.ui.unit.Density(
+                density = density.density,
+                fontScale = density.fontScale * fontScale,
+            )
             val imeBottom = WindowInsets.ime.getBottom(density)
             val contentPadding = if (imeBottom > 0) {
                 PaddingValues(
@@ -311,7 +316,10 @@ fun DeliScaffold(
             Box(modifier = Modifier.fillMaxSize()) {
                 // Every screen is written in Turkish and reads its lines through `t`, which
                 // resolves them against the language picked in Ayarlar.
-                CompositionLocalProvider(LocalAppLang provides lang) {
+                CompositionLocalProvider(
+                    LocalAppLang provides lang,
+                    LocalDensity provides scaledDensity,
+                ) {
                     content(contentPadding)
                 }
             }
@@ -340,7 +348,12 @@ private fun DrawerBody(
                 modifier = Modifier.size(36.dp),
             )
             Spacer(Modifier.width(10.dp))
-            Text("Hoset", color = DeliColors.OnBackground, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                com.delidehset.mobile.data.HosetPrefs.appTitleState.value,
+                color = DeliColors.OnBackground,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
 
         HorizontalDivider(color = DeliColors.Border)
@@ -390,7 +403,7 @@ private fun DrawerBody(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DeliAvatar(url = viewer.avatarUrl, size = 34.dp)
+                DeliAvatar(url = viewer.avatarUrl, size = 34.dp, name = viewer.username)
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = tf("@{0}", viewer.username ?: t("Kullanıcı")),
