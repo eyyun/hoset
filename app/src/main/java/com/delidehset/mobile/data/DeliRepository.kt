@@ -385,6 +385,22 @@ class DeliRepository(
         return interpret(res, tr("Takip"))
     }
 
+    /**
+     * Following a community, the way the hole page's own button does it.
+     *
+     * `/h/{hole}/follow` and `/h/{hole}/unfollow` are POST-only (a GET answers 405) and
+     * take no body — the hole is in the path, which is exactly what the site's own
+     * "… followed successfully!" answer belongs to.
+     */
+    suspend fun followHole(hole: String, follow: Boolean): ActionResult {
+        ensureAntiforgery()
+        val name = encodeSegment(hole)
+        val path = if (follow) "/h/$name/follow" else "/h/$name/unfollow"
+        val res = http.postForm(path, emptyList(), referer = "/h/$name")
+        cache.clear()
+        return interpret(res, tr("Topluluk"))
+    }
+
     /** Notifications from one account, on or off. The site keys it by the account's id. */
     suspend fun muteUserNotifications(id: String, mute: Boolean): ActionResult {
         ensureAntiforgery()

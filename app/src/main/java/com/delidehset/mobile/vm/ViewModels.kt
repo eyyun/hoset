@@ -177,12 +177,41 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
 
     private var started = false
 
+    /** Whether the viewer follows the hole on screen; null before anything was asked. */
+    private val _holeFollowing = MutableStateFlow<Boolean?>(null)
+    val holeFollowing: StateFlow<Boolean?> = _holeFollowing.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    fun consumeMessage() { _message.value = null }
+
     fun start(hole: String?, sort: FeedSort, effortOnly: Boolean = false) {
         if (started && _state.value.hole == hole && _state.value.sort == sort) return
         started = true
+        _holeFollowing.value = null
         _state.value = FeedUiState(sort = sort, hole = hole, effortOnly = effortOnly)
         // Cache first: opening a feed you already visited renders immediately.
         load(reset = true, force = false)
+    }
+
+    /** Follow or leave a community; the hole's own page uses the same two routes. */
+    fun toggleHoleFollow(hole: String) {
+        val target = !(_holeFollowing.value ?: false)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.followHole(hole, target) }
+                .onSuccess { result ->
+                    if (result.ok) {
+                        _holeFollowing.value = target
+                        _message.value = tr(
+                            if (target) "Topluluk takip edildi." else "Topluluk takibi bırakıldı."
+                        )
+                    } else {
+                        _message.value = result.message ?: tr("İşlem tamamlanamadı.")
+                    }
+                }
+                .onFailure { _message.value = DeliErrors.explain(it) }
+        }
     }
 
     fun setSort(sort: FeedSort) {

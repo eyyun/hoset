@@ -206,6 +206,7 @@ private fun DeliRoot() {
                     onOpenPost = { nav.navigate(Routes.post(it)) },
                     onOpenHole = { nav.navigate("feed/$it") },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
+                    onMessage = { appVm.showMessage(it) },
                 )
             }
 
@@ -220,6 +221,7 @@ private fun DeliRoot() {
                     onOpenPost = { nav.navigate(Routes.post(it)) },
                     onOpenHole = { nav.navigate("feed/$it") },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
+                    onMessage = { appVm.showMessage(it) },
                 )
             }
 
@@ -238,6 +240,7 @@ private fun DeliRoot() {
                     onOpenPost = { nav.navigate(Routes.post(it)) },
                     onOpenHole = { nav.navigate("feed/$it") },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
+                    onMessage = { appVm.showMessage(it) },
                 )
             }
 

@@ -386,6 +386,9 @@ internal val phrases: List<Phrase> = listOf(
     /* ------------------------------------------------ profile actions */
     Phrase("Takip et", "Follow", "Folgen", "Seguir", "Suivre", "Seguir", "Подписаться", "フォロー"),
     Phrase("Takip bırak", "Unfollow", "Nicht mehr folgen", "Dejar de seguir", "Ne plus suivre", "Deixar de seguir", "Отписаться", "フォロー解除"),
+    Phrase("Takipten çık", "Leave", "Austreten", "Salir", "Quitter", "Sair", "Покинуть", "参加をやめる"),
+    Phrase("Topluluk takip edildi.", "You are following the community.", "Du folgst der Community.", "Ahora sigues la comunidad.", "Tu suis la communauté.", "Você segue a comunidade.", "Вы подписались на сообщество.", "コミュニティをフォローしました。"),
+    Phrase("Topluluk takibi bırakıldı.", "You left the community.", "Community nicht mehr gefolgt.", "Has dejado de seguir la comunidad.", "Tu ne suis plus la communauté.", "Você deixou de seguir a comunidade.", "Вы отписались от сообщества.", "コミュニティのフォローを解除しました。"),
     Phrase("Takip edildi.", "You are following them.", "Du folgst jetzt.", "Ahora lo sigues.", "Tu le suis maintenant.", "Agora você o segue.", "Вы подписались.", "フォローしました。"),
     Phrase("Takipten çıkıldı.", "You unfollowed them.", "Du folgst nicht mehr.", "Has dejado de seguirlo.", "Tu ne le suis plus.", "Você deixou de segui-lo.", "Вы отписались.", "フォローを解除しました。"),
     Phrase("Sessize al", "Mute", "Stummschalten", "Silenciar", "Mettre en sourdine", "Silenciar", "Отключить уведомления", "ミュート"),

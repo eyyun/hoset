@@ -55,10 +55,17 @@ fun FeedScreen(
     onOpenPost: (String) -> Unit,
     onOpenHole: (String) -> Unit,
     onOpenUser: (String) -> Unit,
+    onMessage: (String) -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val holeFollowing by vm.holeFollowing.collectAsStateWithLifecycle()
+    val vmMessage by vm.message.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
+
+    LaunchedEffect(vmMessage) {
+        vmMessage?.let { onMessage(it); vm.consumeMessage() }
+    }
 
     LaunchedEffect(hole, effortOnly) {
         vm.start(hole = hole, sort = state.sort, effortOnly = effortOnly)
@@ -74,6 +81,40 @@ fun FeedScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(DeliColors.Background)) {
+        // A hole's feed carries the hole itself: its name, and the follow button the
+        // site's own hole page has. The community is the subject here, not the app.
+        if (hole != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 12.dp, top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "/h/$hole",
+                    color = DeliColors.OnBackground,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                val following = holeFollowing == true
+                Box(
+                    modifier = Modifier
+                        .clip(DeliShapes.small)
+                        .background(if (following) DeliColors.SurfaceVariant else DeliColors.Primary)
+                        .clickable { vm.toggleHoleFollow(hole) }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                ) {
+                    Text(
+                        text = t(if (following) "Takipten çık" else "Takip et"),
+                        color = if (following) DeliColors.OnBackground else androidx.compose.ui.graphics.Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+
         // ---- sort bar, same four buttons as the site ----
         Row(
             modifier = Modifier
