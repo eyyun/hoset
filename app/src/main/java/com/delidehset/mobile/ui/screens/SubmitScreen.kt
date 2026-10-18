@@ -54,11 +54,13 @@ fun SubmitScreen(
     onSubmitted: () -> Unit,
     onMessage: (String) -> Unit,
     onOpenLogin: () -> Unit,
+    /** When the composer is opened from a community, it starts on that community. */
+    initialHole: String? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
-    var hole by remember { mutableStateOf("") }
+    var hole by remember(initialHole) { mutableStateOf(initialHole.orEmpty()) }
     var nsfw by remember { mutableStateOf(false) }
     var anonymous by remember { mutableStateOf(!signedIn) }
     var tripcode by remember { mutableStateOf("") }

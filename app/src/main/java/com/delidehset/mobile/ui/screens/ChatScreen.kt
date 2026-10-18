@@ -107,6 +107,8 @@ fun ChatScreen(
     viewerName: String?,
     contentPadding: PaddingValues,
     onOpenLogin: () -> Unit,
+    /** Tapping someone's picture or name in the room opens their profile. */
+    onOpenUser: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     var chat by remember { mutableStateOf(ChatState.Empty) }
@@ -326,6 +328,7 @@ fun ChatScreen(
                             own = viewerName != null && message.author.equals(viewerName, ignoreCase = true),
                             startsTurn = previous == null ||
                                 !previous.author.equals(message.author, ignoreCase = true),
+                            onOpenUser = onOpenUser,
                         )
                     }
                 }
@@ -780,7 +783,12 @@ private fun VoiceControl(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(message: ChatMessage, own: Boolean, startsTurn: Boolean) {
+private fun ChatRow(
+    message: ChatMessage,
+    own: Boolean,
+    startsTurn: Boolean,
+    onOpenUser: (String) -> Unit = {},
+) {
     val rendered = remember(message.id, message.bodyHtml) { DeliHtml.render(message.bodyHtml) }
 
     // The room's own colour for this account when it has one, otherwise the colour the
@@ -851,6 +859,9 @@ private fun ChatRow(message: ChatMessage, own: Boolean, startsTurn: Boolean) {
                             color = authorColor,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                message.author.takeIf { it.isNotBlank() }?.let(onOpenUser)
+                            },
                         )
                         Spacer(Modifier.width(6.dp))
                     }
@@ -909,7 +920,17 @@ private fun ChatRow(message: ChatMessage, own: Boolean, startsTurn: Boolean) {
             Box(modifier = Modifier.weight(1f, fill = false)) { body() }
         } else {
             if (startsTurn) {
-                DeliAvatar(url = message.avatarUrl, size = 28.dp, name = message.author)
+                // The picture (or its letter) carries the colour the name already has, so
+                // a person is one colour in the room instead of two.
+                DeliAvatar(
+                    url = message.avatarUrl,
+                    size = 28.dp,
+                    name = message.author,
+                    accent = authorColor,
+                    modifier = Modifier.clickable {
+                        message.author.takeIf { it.isNotBlank() }?.let(onOpenUser)
+                    },
+                )
                 Spacer(Modifier.width(9.dp))
             } else {
                 // Keep the follow-up lines aligned with the first one instead of letting

@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +69,8 @@ fun DeliAvatar(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
     name: String? = null,
+    /** The colour the name already has on this screen, so the letter matches it. */
+    accent: Color? = null,
 ) {
     val context = LocalContext.current
     // The kit decides whether a face is round or a tile; both the picture and the letter
@@ -80,7 +83,14 @@ fun DeliAvatar(
         ?.let { if (it.startsWith("http")) it else DeliHttp.BASE_URL + it }
 
     if (full == null) {
-        InitialAvatar(name = name, size = size, shape = shape, modifier = modifier, contentDescription = contentDescription)
+        InitialAvatar(
+            name = name,
+            size = size,
+            shape = shape,
+            modifier = modifier,
+            contentDescription = contentDescription,
+            accent = accent,
+        )
         return
     }
 
@@ -100,7 +110,13 @@ fun DeliAvatar(
         if (painter.state is AsyncImagePainter.State.Success) {
             SubcomposeAsyncImageContent()
         } else {
-            InitialAvatar(name = name, size = size, shape = shape, contentDescription = contentDescription)
+            InitialAvatar(
+                name = name,
+                size = size,
+                shape = shape,
+                contentDescription = contentDescription,
+                accent = accent,
+            )
         }
     }
 }
@@ -120,9 +136,10 @@ private fun InitialAvatar(
     shape: Shape,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    accent: Color? = null,
 ) {
     val label = name?.trim()?.takeIf { it.isNotEmpty() }
-    val tint = label?.let { nameColor(it) }
+    val tint = accent ?: label?.let { nameColor(it) }
     Box(
         modifier = modifier
             .size(size)
@@ -368,24 +385,34 @@ fun MutedText(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun DeliButtonPrimary(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+fun DeliButtonPrimary(
+    text: String,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit,
+) {
     val kit = DeliColors.palette
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().kitButtonOutline(kit),
+        modifier = modifier.kitButtonOutline(kit),
         shape = controlShape(kit),
         colors = kitButtonColors(kit),
     ) { Text(text, fontWeight = kit.titleWeight, letterSpacing = kit.letterSpacing) }
 }
 
 @Composable
-fun DeliOutlinedButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+fun DeliOutlinedButton(
+    text: String,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onClick: () -> Unit,
+) {
     val kit = DeliColors.palette
     androidx.compose.material3.OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = controlShape(kit),
         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
             contentColor = DeliColors.OnBackground,

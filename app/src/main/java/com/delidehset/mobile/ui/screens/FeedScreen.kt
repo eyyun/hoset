@@ -3,6 +3,7 @@ package com.delidehset.mobile.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
@@ -38,6 +49,7 @@ import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.components.EmptyBox
 import com.delidehset.mobile.ui.components.ErrorBox
 import com.delidehset.mobile.ui.components.LoadingBox
+import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.PostCard
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.FeedViewModel
@@ -56,9 +68,12 @@ fun FeedScreen(
     onOpenHole: (String) -> Unit,
     onOpenUser: (String) -> Unit,
     onMessage: (String) -> Unit = {},
+    /** A community's own "post in this hole" button. */
+    onOpenSubmit: (hole: String) -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val holeFollowing by vm.holeFollowing.collectAsStateWithLifecycle()
+    val holeBlocked by vm.holeBlocked.collectAsStateWithLifecycle()
     val vmMessage by vm.message.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -68,7 +83,15 @@ fun FeedScreen(
     }
 
     LaunchedEffect(hole, effortOnly) {
-        vm.start(hole = hole, sort = state.sort, effortOnly = effortOnly)
+        val initialSort = com.delidehset.mobile.data.HosetPrefs.defaultSort(context)
+        vm.start(hole = hole, sort = initialSort, effortOnly = effortOnly)
+    }
+
+    // Choosing a sort replaces the list, and the list keeps its scroll offset — which left
+    // the person in the middle of a list they had not seen the top of. Any change of sort
+    // starts at the top again.
+    LaunchedEffect(state.sort) {
+        runCatching { listState.scrollToItem(0) }
     }
 
     // Infinite scroll: ask for the next page a little before the end.
@@ -84,34 +107,75 @@ fun FeedScreen(
         // A hole's feed carries the hole itself: its name, and the follow button the
         // site's own hole page has. The community is the subject here, not the app.
         if (hole != null) {
-            Row(
+            // A community page, not just a filtered feed: its name, joining and leaving,
+            // and the "post in this hole" button the site puts on top of its own page.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 14.dp, end = 12.dp, top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(start = 12.dp, end = 12.dp, top = 10.dp),
             ) {
-                Text(
-                    text = "/h/$hole",
-                    color = DeliColors.OnBackground,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                val following = holeFollowing == true
-                Box(
-                    modifier = Modifier
-                        .clip(DeliShapes.small)
-                        .background(if (following) DeliColors.SurfaceVariant else DeliColors.Primary)
-                        .clickable { vm.toggleHoleFollow(hole) }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                ) {
-                    Text(
-                        text = t(if (following) "Takipten çık" else "Takip et"),
-                        color = if (following) DeliColors.OnBackground else androidx.compose.ui.graphics.Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(DeliColors.PrimaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = hole.take(1).uppercase(),
+                            color = DeliColors.Primary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "/h/$hole",
+                            color = DeliColors.OnBackground,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = t("Topluluk"),
+                            color = DeliColors.OnSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    val following = holeFollowing == true
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (following) DeliColors.SurfaceVariant else DeliColors.Primary)
+                            .clickable { vm.toggleHoleFollow(hole) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = t(if (following) "Takipten çık" else "Takip et"),
+                            color = if (following) DeliColors.OnBackground else androidx.compose.ui.graphics.Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = if (holeBlocked == true) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = t(if (holeBlocked == true) "Engeli kaldır" else "Engelle"),
+                        tint = DeliColors.OnSurfaceVariant,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable { vm.toggleHoleBlock(hole) },
                     )
                 }
+
+                Spacer(Modifier.height(8.dp))
+                DeliButtonPrimary(
+                    text = t("Gönderi oluştur"),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { onOpenSubmit(hole) }
             }
         }
 
@@ -120,6 +184,7 @@ fun FeedScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DeliColors.Background)
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -171,8 +236,9 @@ fun FeedScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(state.posts, key = { it.id }) { post: FeedPost ->
+                    items(state.posts, key = { it.id }, contentType = { "post" }) { post: FeedPost ->
                         PostCard(
+                            modifier = Modifier.animateItem(),
                             post = post,
                             canVote = canVote,
                             onOpen = { onOpenPost(post.permalink) },

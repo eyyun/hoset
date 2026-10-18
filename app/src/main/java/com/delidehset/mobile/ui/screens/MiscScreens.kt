@@ -239,6 +239,8 @@ fun UsersScreen(
             items(state.items) { user: SiteUser ->
                 DeliCard(onClick = { onOpenUser(user.name) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        DeliAvatar(url = null, size = 34.dp, name = user.name)
+                        Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 "@${user.name}",
@@ -512,8 +514,9 @@ fun SettingsScreen(
                         Text(t("Uygulama Teması"), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         Text(t(theme.name), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
                     }
+                    val allAvailable = DeliPalettes.available
                     Text(
-                        text = tf("{0} / {1}", DeliPalettes.all.indexOf(theme) + 1, DeliPalettes.all.size),
+                        text = tf("{0} / {1}", (allAvailable.indexOfFirst { it.id == theme.id }.takeIf { it >= 0 } ?: 0) + 1, allAvailable.size),
                         color = DeliColors.OnSurfaceVariant,
                         fontSize = 12.sp,
                     )
@@ -528,7 +531,7 @@ fun SettingsScreen(
                         .padding(horizontal = 12.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    for (option in DeliPalettes.all) {
+                    for (option in DeliPalettes.available) {
                         val active = option.id == theme.id
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
