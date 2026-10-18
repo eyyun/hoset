@@ -2,6 +2,7 @@ package com.delidehset.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,31 +19,50 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
+import com.delidehset.mobile.ui.theme.ButtonStyle
+import com.delidehset.mobile.ui.theme.CardStyle
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.DeliPalettes
 import com.delidehset.mobile.ui.theme.DeliShapes
 import com.delidehset.mobile.ui.theme.Palette
+import com.delidehset.mobile.ui.theme.avatarShape
+import com.delidehset.mobile.ui.theme.controlShape
+import com.delidehset.mobile.ui.theme.kitTraits
 
 /**
  * The theme store: every kit the app ships with, each one drawn as itself.
  *
- * A row of colour dots says almost nothing about a kit — two kits can share a palette and
- * still feel different, because the corners are half of it. So each entry carries a small
- * mock of the app rendered with *that* kit's own values, colours and radii both, and the
- * choice is made by looking at it rather than by reading a name.
+ * A row of colour dots says almost nothing about a kit, so each entry carries a preview
+ * built out of the things a kit actually changes — a top bar, a post with its votes, a
+ * couple of buttons and the bottom bar — with *that* kit's colours, corners, chrome,
+ * avatar shape and air. Two kits that share a palette still look different here, which is
+ * the point: the preview is the app, not a swatch.
  */
 @Composable
 fun ThemeStoreScreen(
@@ -81,11 +101,7 @@ fun ThemeStoreScreen(
         }
 
         items(DeliPalettes.all, key = { it.id }) { kit ->
-            KitCard(
-                kit = kit,
-                active = kit.id == current.id,
-                onApply = { onApply(kit) },
-            )
+            KitCard(kit = kit, active = kit.id == current.id, onApply = { onApply(kit) })
         }
     }
 }
@@ -113,7 +129,7 @@ private fun KitCard(kit: Palette, active: Boolean, onApply: () -> Unit) {
                     .background(kit.primary.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                androidx.compose.material3.Icon(
+                Icon(
                     imageVector = kit.icon,
                     contentDescription = null,
                     tint = kit.primary,
@@ -146,12 +162,21 @@ private fun KitCard(kit: Palette, active: Boolean, onApply: () -> Unit) {
                         }
                     }
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = tf("köşe {0} dp", kit.cardRadius.value.toInt()),
-                    color = DeliColors.OnSurfaceVariant,
-                    fontSize = 12.sp,
-                )
+                Spacer(Modifier.height(4.dp))
+                // What this kit is made of, in words, next to the picture of it. One chip
+                // per trait, because a joined string cannot be translated piece by piece.
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (trait in kitTraits(kit)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(DeliShapes.pill)
+                                .background(DeliColors.SurfaceVariant)
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            Text(t(trait), color = DeliColors.OnSurfaceVariant, fontSize = 9.5.sp)
+                        }
+                    }
+                }
             }
             if (!active) {
                 TextButton(onClick = onApply) {
@@ -163,167 +188,195 @@ private fun KitCard(kit: Palette, active: Boolean, onApply: () -> Unit) {
         Spacer(Modifier.height(10.dp))
 
         KitPreview(kit)
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Swatch(kit.background)
-            Swatch(kit.surface)
-            Swatch(kit.surfaceVariant)
-            Swatch(kit.primary)
-            Swatch(kit.blue)
-            Swatch(kit.upvote)
-            Swatch(kit.downvote)
-            Swatch(kit.success)
-            Swatch(kit.warning)
-            Swatch(kit.danger)
-            Spacer(Modifier.weight(1f))
-        }
     }
-}
-
-@Composable
-private fun Swatch(color: Color) {
-    Box(
-        modifier = Modifier
-            .size(16.dp)
-            .clip(CircleShape)
-            .background(color)
-            .border(1.dp, DeliColors.Border, CircleShape),
-    )
 }
 
 /**
- * A miniature of the app in one kit: a bar, a post, a row of chips and the bottom bar.
- *
- * Drawn from the palette it is handed rather than from the colours in force, which is the
- * whole point — the preview has to show the kit, not the screen showing the kit.
+ * A miniature of the app in one kit: its top bar, a post with its votes, a button and the
+ * bottom bar — drawn from the palette and radii handed in rather than from the kit in
+ * force, which is the whole point of a preview.
  */
 @Composable
 private fun KitPreview(kit: Palette) {
+    val shape = RoundedCornerShape(kit.cardRadius)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(170.dp)
-            .clip(RoundedCornerShape(kit.cardRadius))
+            .clip(shape)
             .background(kit.background)
-            .border(1.dp, kit.border, RoundedCornerShape(kit.cardRadius)),
+            .border(1.dp, kit.border, shape),
     ) {
-        // Top bar: the mark, a title, and the two actions every screen has.
+        // Top bar.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(30.dp)
                 .background(kit.surface)
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(14.dp).clip(CircleShape).background(kit.primary))
-            Spacer(Modifier.width(7.dp))
-            Bar(width = 46.dp, height = 6.dp, color = kit.onBackground, alpha = 0.85f)
+            Icon(Icons.Filled.Menu, contentDescription = null, tint = kit.onBackground, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Hoset", color = kit.onBackground, fontSize = 13.sp, fontWeight = kit.titleWeight)
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(10.dp).clip(CircleShape).background(kit.surfaceVariant))
-            Spacer(Modifier.width(7.dp))
-            Box(Modifier.size(10.dp).clip(CircleShape).background(kit.surfaceVariant))
+            Icon(Icons.Filled.Search, contentDescription = null, tint = kit.onSurfaceVariant, modifier = Modifier.size(14.dp))
+        }
+        if (kit.cardStyle == CardStyle.OUTLINED) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
         }
 
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
-            // A post: who wrote it, what they wrote, and what you can do about it.
+        // The post itself, in the kit's own surface idiom.
+        Column(modifier = Modifier.padding(kit.spacing * 0.6f)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(kit.controlRadius))
-                    .background(kit.surface)
-                    .padding(9.dp),
+                    .then(previewSurface(kit, RoundedCornerShape(kit.cardRadius)))
+                    .padding(kit.spacing * 0.7f),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(16.dp).clip(CircleShape).background(kit.primary))
-                    Spacer(Modifier.width(7.dp))
-                    Column {
-                        Bar(width = 62.dp, height = 6.dp, color = kit.onBackground, alpha = 0.9f)
-                        Spacer(Modifier.height(4.dp))
-                        Bar(width = 38.dp, height = 5.dp, color = kit.onSurfaceVariant, alpha = 0.9f)
+                    PreviewAvatar(kit, size = 22.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("@hoset", color = kit.onBackground, fontSize = 11.sp, fontWeight = kit.titleWeight, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("general · 2 sa", color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(kit.smallRadius))
+                            .background(kit.primaryContainer)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text("12", color = if (kit.dark) Color.White else kit.onBackground, fontSize = 9.sp)
                     }
                 }
-                Spacer(Modifier.height(9.dp))
-                Bar(Modifier.fillMaxWidth(0.92f), 6.dp, kit.onBackground, 0.55f)
-                Spacer(Modifier.height(5.dp))
-                Bar(Modifier.fillMaxWidth(0.68f), 6.dp, kit.onBackground, 0.55f)
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip(kit.upvote, kit.controlRadius)
-                    Chip(kit.downvote, kit.controlRadius)
-                    Chip(kit.primary, kit.controlRadius)
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    text = t("Örnek gönderi"),
+                    color = kit.onBackground,
+                    fontSize = 13.sp,
+                    fontWeight = kit.titleWeight,
+                    letterSpacing = kit.letterSpacing,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = t("Tema önizlemesi"),
+                    color = kit.onSurfaceVariant,
+                    fontSize = 10.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = kit.upvote, modifier = Modifier.size(15.dp))
+                    Text("12", color = kit.upvote, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp))
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = kit.downvote, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(t("Yorumlar"), color = kit.onSurfaceVariant, fontSize = 10.sp)
+                    Text(" 3", color = kit.onSurfaceVariant, fontSize = 10.sp)
+                    Spacer(Modifier.weight(1f))
+                    // The kit's own button idiom, at preview size.
+                    Box(
+                        modifier = Modifier
+                            .then(previewButton(kit))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(t("Uygula"), color = previewButtonText(kit), fontSize = 9.5.sp, fontWeight = kit.titleWeight)
+                    }
                 }
             }
 
-            Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(kit.spacing * 0.5f))
 
-            // The small chips a list screen is made of.
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                SoftChip(kit.surfaceVariant, kit.smallRadius)
-                SoftChip(kit.surfaceVariant, kit.smallRadius)
-                SoftChip(kit.primary.copy(alpha = 0.25f), kit.smallRadius)
+            // A row of the kind a settings or hole list is made of.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(kit.smallRadius))
+                        .background(kit.primary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(kit.primary))
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(t("Uygulama Teması"), color = kit.onBackground, fontSize = 10.5.sp, maxLines = 1)
+                    Text(t(kit.name), color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
+                }
+                Text("›", color = kit.onSurfaceVariant, fontSize = 12.sp)
             }
         }
 
-        Spacer(Modifier.weight(1f))
-
-        // The bottom bar, where the app's four tabs live.
+        // Bottom bar, with the tabs the app really has.
+        if (kit.cardStyle == CardStyle.OUTLINED) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(26.dp)
                 .background(kit.surface)
-                .padding(horizontal = 14.dp),
+                .padding(vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Box(Modifier.size(11.dp).clip(CircleShape).background(kit.primary))
-            Box(Modifier.size(11.dp).clip(CircleShape).background(kit.onSurfaceVariant.copy(alpha = 0.5f)))
-            Box(Modifier.size(11.dp).clip(CircleShape).background(kit.onSurfaceVariant.copy(alpha = 0.5f)))
-            Box(Modifier.size(11.dp).clip(CircleShape).background(kit.onSurfaceVariant.copy(alpha = 0.5f)))
+            PreviewTab(kit, Icons.Filled.Home, t("Feed"), active = true)
+            PreviewTab(kit, Icons.Filled.Groups, t("Topluluklar"), active = false)
+            PreviewTab(kit, Icons.Filled.Forum, t("Sohbet"), active = false)
+            PreviewTab(kit, Icons.Filled.Person, t("Profil"), active = false)
         }
     }
 }
 
 @Composable
-private fun Bar(
-    width: Dp,
-    height: Dp,
-    color: Color,
-    alpha: Float,
-) = Box(
-    modifier = Modifier
-        .width(width)
-        .height(height)
-        .clip(RoundedCornerShape(50))
-        .background(color.copy(alpha = alpha)),
-)
-
-@Composable
-private fun Bar(modifier: Modifier, height: Dp, color: Color, alpha: Float) =
-    Box(modifier = modifier.height(height).clip(RoundedCornerShape(50)).background(color.copy(alpha = alpha)))
-
-@Composable
-private fun Chip(color: Color, radius: Dp) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(radius))
-            .background(color.copy(alpha = 0.22f))
-            .padding(horizontal = 9.dp, vertical = 4.dp),
-    ) {
-        Bar(width = 16.dp, height = 5.dp, color = color, alpha = 1f)
+private fun PreviewTab(kit: Palette, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean) {
+    val tint = if (active) kit.primary else kit.onSurfaceVariant
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, color = tint, fontSize = 8.5.sp)
     }
 }
 
+/** A card's chrome in the kit's idiom: filled, then outlined, lifted or left bare. */
+private fun previewSurface(kit: Palette, shape: Shape): Modifier {
+    var modifier: Modifier = Modifier
+    if (kit.cardStyle == CardStyle.ELEVATED) {
+        modifier = modifier.shadow(
+            elevation = 8.dp,
+            shape = shape,
+            ambientColor = Color.Black.copy(alpha = 0.55f),
+            spotColor = Color.Black.copy(alpha = 0.55f),
+        )
+    }
+    modifier = modifier.clip(shape).background(kit.surface)
+    if (kit.cardStyle == CardStyle.OUTLINED) modifier = modifier.border(1.dp, kit.border, shape)
+    return modifier
+}
+
+private fun previewButton(kit: Palette): Modifier = when (kit.buttonStyle) {
+    ButtonStyle.FILLED -> Modifier.clip(controlShape(kit)).background(kit.primary)
+    ButtonStyle.SOFT -> Modifier.clip(controlShape(kit)).background(kit.primaryContainer)
+    ButtonStyle.OUTLINED -> Modifier.clip(controlShape(kit)).border(1.dp, kit.primary, controlShape(kit))
+}
+
+private fun previewButtonText(kit: Palette): Color = when (kit.buttonStyle) {
+    ButtonStyle.FILLED -> Color.White
+    ButtonStyle.SOFT -> kit.onBackground
+    ButtonStyle.OUTLINED -> kit.primary
+}
+
+/** The avatar the kit asks for: round, or a tile. */
 @Composable
-private fun SoftChip(color: Color, radius: Dp) {
+private fun PreviewAvatar(kit: Palette, size: Dp) {
     Box(
         modifier = Modifier
-            .width(38.dp)
-            .height(14.dp)
-            .clip(RoundedCornerShape(radius))
-            .background(color),
-    )
+            .size(size)
+            .clip(avatarShape(kit))
+            .background(kit.primary.copy(alpha = 0.35f))
+            .border(1.dp, kit.primary.copy(alpha = 0.5f), avatarShape(kit)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("H", color = if (kit.dark) Color.White else kit.onBackground, fontSize = (size.value * 0.5f).sp, fontWeight = FontWeight.Bold)
+    }
 }

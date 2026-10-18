@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -45,8 +46,13 @@ import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
 import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.theme.DeliColors
+import com.delidehset.mobile.ui.theme.avatarShape
+import com.delidehset.mobile.ui.theme.cardShape
+import com.delidehset.mobile.ui.theme.controlShape
+import com.delidehset.mobile.ui.theme.kitButtonColors
+import com.delidehset.mobile.ui.theme.kitButtonOutline
+import com.delidehset.mobile.ui.theme.kitSurface
 import com.delidehset.mobile.ui.theme.nameColor
-import com.delidehset.mobile.ui.theme.DeliShapes
 
 /**
  * A user avatar. When the account has no picture — which on this beta is more often than
@@ -64,6 +70,9 @@ fun DeliAvatar(
     name: String? = null,
 ) {
     val context = LocalContext.current
+    // The kit decides whether a face is round or a tile; both the picture and the letter
+    // fallback below follow it.
+    val shape = avatarShape(DeliColors.palette)
     // The site serves a stock picture for accounts without one; showing it next to the
     // app's own placeholder is what made avatars look inconsistent between screens.
     val full = url
@@ -71,7 +80,7 @@ fun DeliAvatar(
         ?.let { if (it.startsWith("http")) it else DeliHttp.BASE_URL + it }
 
     if (full == null) {
-        InitialAvatar(name = name, size = size, modifier = modifier, contentDescription = contentDescription)
+        InitialAvatar(name = name, size = size, shape = shape, modifier = modifier, contentDescription = contentDescription)
         return
     }
 
@@ -83,7 +92,7 @@ fun DeliAvatar(
     SubcomposeAsyncImage(
         model = request,
         contentDescription = contentDescription,
-        modifier = modifier.size(size).clip(CircleShape),
+        modifier = modifier.size(size).clip(shape),
         contentScale = ContentScale.Crop,
     ) {
         // A picture that fails to load lands here too, so a dead URL shows the same
@@ -91,7 +100,7 @@ fun DeliAvatar(
         if (painter.state is AsyncImagePainter.State.Success) {
             SubcomposeAsyncImageContent()
         } else {
-            InitialAvatar(name = name, size = size, contentDescription = contentDescription)
+            InitialAvatar(name = name, size = size, shape = shape, contentDescription = contentDescription)
         }
     }
 }
@@ -108,6 +117,7 @@ fun DeliAvatar(
 private fun InitialAvatar(
     name: String?,
     size: Dp,
+    shape: Shape,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
@@ -116,7 +126,7 @@ private fun InitialAvatar(
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(shape)
             .background(
                 if (tint != null) {
                     Brush.linearGradient(
@@ -126,7 +136,7 @@ private fun InitialAvatar(
                     Brush.linearGradient(listOf(DeliColors.SurfaceVariant, DeliColors.Surface))
                 }
             )
-            .border(1.dp, (tint ?: DeliColors.Border).copy(alpha = if (tint != null) 0.6f else 1f), CircleShape),
+            .border(1.dp, (tint ?: DeliColors.Border).copy(alpha = if (tint != null) 0.6f else 1f), shape),
         contentAlignment = Alignment.Center,
         propagateMinConstraints = true,
     ) {
@@ -148,7 +158,12 @@ private fun InitialAvatar(
     }
 }
 
-/** Card surface used by every list on the site (`.card` / `.feed-card`). */
+/**
+ * Card surface used by every list on the site (`.card` / `.feed-card`).
+ *
+ * The fill, the hairline, the lift and the padding all come from the kit in force, so a
+ * list is drawn in that kit's idiom rather than in one fixed one.
+ */
 @Composable
 fun DeliCard(
     modifier: Modifier = Modifier,
@@ -158,12 +173,10 @@ fun DeliCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(DeliShapes.control)
-            .background(DeliColors.Surface)
-            .border(1.dp, DeliColors.Border, DeliShapes.control)
+            .kitSurface()
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) { content() }
+        Column { content() }
     }
 }
 
@@ -209,12 +222,14 @@ fun EmptyBox(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+    val kit = DeliColors.palette
     Text(
         text = text,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = kit.spacing * 0.8f),
         color = DeliColors.OnBackground,
         fontSize = 18.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = kit.titleWeight,
+        letterSpacing = kit.letterSpacing,
     )
 }
 
@@ -308,6 +323,12 @@ fun DeliChip(text: String, onClick: (() -> Unit)? = null, accent: Boolean = fals
 
 @Composable
 fun ThinDivider(modifier: Modifier = Modifier) {
+    // Kits that separate their rows with air instead of a line simply give the space.
+    val kit = DeliColors.palette
+    if (!kit.dividers) {
+        Spacer(modifier.fillMaxWidth().height(kit.spacing * 0.5f))
+        return
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -348,25 +369,24 @@ fun MutedText(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun DeliButtonPrimary(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val kit = DeliColors.palette
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
-        shape = DeliShapes.small,
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-            containerColor = DeliColors.Primary,
-            contentColor = androidx.compose.ui.graphics.Color.White,
-        ),
-    ) { Text(text, fontWeight = FontWeight.SemiBold) }
+        modifier = Modifier.fillMaxWidth().kitButtonOutline(kit),
+        shape = controlShape(kit),
+        colors = kitButtonColors(kit),
+    ) { Text(text, fontWeight = kit.titleWeight, letterSpacing = kit.letterSpacing) }
 }
 
 @Composable
 fun DeliOutlinedButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val kit = DeliColors.palette
     androidx.compose.material3.OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        shape = DeliShapes.small,
+        shape = controlShape(kit),
         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
             contentColor = DeliColors.OnBackground,
         ),
