@@ -164,5 +164,47 @@ object UpdateChecker {
     )
 }
 
+/* ------------------------------------------------------------------ */
+/*  What a check means                                                  */
+/* ------------------------------------------------------------------ */
+
+/** The whole answer a check can have, kept out of the ViewModel so it can be tested. */
+enum class UpdateDecision {
+    /** Said nothing: nothing to show, and nothing to remember. */
+    NONE,
+    AVAILABLE,
+    UP_TO_DATE,
+    /** The check did not complete — which is not the same as being up to date. */
+    FAILED,
+}
+
+/**
+ * What to do with a check's outcome.
+ *
+ * Two failures lived here. A check that could not be made used to be written down as
+ * "checked just now", which kept the app from asking again for a whole day — from the
+ * outside, an app that never looks is an app that believes it is current. And a version
+ * the person had already put off was skipped even when they asked about it themselves,
+ * so a manual check answered "you are on the latest version" while a newer release sat
+ * on GitHub. Neither is decided in the ViewModel any more.
+ *
+ * @param latestVersion the tag the server returned, or null when nothing came back
+ * @param skippedVersion the version the person last put off, if any
+ */
+internal fun decideUpdate(
+    latestVersion: String?,
+    currentVersion: String,
+    auto: Boolean,
+    skippedVersion: String?,
+): UpdateDecision = when {
+    latestVersion == null -> if (auto) UpdateDecision.NONE else UpdateDecision.FAILED
+    UpdateChecker.isNewer(latestVersion, currentVersion) -> {
+        // "Later" silences the automatic check, never a person who asked.
+        if (auto && skippedVersion == latestVersion) UpdateDecision.NONE else UpdateDecision.AVAILABLE
+    }
+    auto -> UpdateDecision.NONE
+    else -> UpdateDecision.UP_TO_DATE
+}
+
 /** A download that did not arrive intact, or did not arrive at all. */
 class UpdateException(message: String) : Exception(message)

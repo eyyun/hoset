@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.delidehset.mobile.BuildConfig
 import com.delidehset.mobile.data.ApkInstaller
 import com.delidehset.mobile.data.UpdateChecker
+import com.delidehset.mobile.data.UpdateDecision
 import com.delidehset.mobile.data.UpdateException
 import com.delidehset.mobile.data.UpdateInfo
+import com.delidehset.mobile.data.decideUpdate
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,7 +53,12 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
     private var pending: UpdateInfo? = null
 
     fun maybeCheckOnLaunch() {
-        if (_state.value !is UpdateState.Idle) return
+        // A failed check leaves the state on Failed; that must not stop the next launch from
+        // trying again, or one bad minute of network hides every release after it.
+        when (_state.value) {
+            UpdateState.Checking, is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready -> return
+            else -> Unit
+        }
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
         if (System.currentTimeMillis() - last < CHECK_INTERVAL_MS) return
         check(auto = true)
@@ -65,28 +72,32 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             _state.value = UpdateState.Checking
             val info = runCatching { UpdateChecker.latest(currentVersion) }.getOrNull()
-            prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+            val decision = decideUpdate(
+                latestVersion = info?.version,
+                currentVersion = currentVersion,
+                auto = auto,
+                skippedVersion = prefs.getString(KEY_SKIPPED, null),
+            )
 
-            when {
-                info == null -> {
-                    _state.value = if (auto) {
-                        UpdateState.Idle
-                    } else {
-                        UpdateState.Failed("Güncelleme denetlenemedi.")
-                    }
-                    if (!auto) _visible.value = true
-                }
-                UpdateChecker.isNewer(info.version, currentVersion) &&
-                    prefs.getString(KEY_SKIPPED, null) != info.version -> {
+            // Only a check that actually reached the server counts as a check: writing the
+            // timestamp on a failure is what kept the app from looking again for a day.
+            if (info != null) prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+
+            when (decision) {
+                UpdateDecision.AVAILABLE -> if (info != null) {
                     pending = info
                     _state.value = UpdateState.Available(info)
                     _visible.value = true
                 }
-                auto -> _state.value = UpdateState.Idle
-                else -> {
+                UpdateDecision.UP_TO_DATE -> {
                     _state.value = UpdateState.UpToDate(currentVersion)
                     _visible.value = true
                 }
+                UpdateDecision.FAILED -> {
+                    _state.value = UpdateState.Failed("Güncelleme denetlenemedi.")
+                    _visible.value = true
+                }
+                UpdateDecision.NONE -> _state.value = UpdateState.Idle
             }
         }
     }
@@ -101,6 +112,9 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
 
         pending = info
         _visible.value = true
+        // Installing it is the answer to "later"; remembering the skip past that would
+        // silence the same version if the install were cancelled.
+        prefs.edit().remove(KEY_SKIPPED).apply()
         _state.value = UpdateState.Downloading(info, 0f)
 
         viewModelScope.launch {
@@ -144,7 +158,11 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
 
     /** The drawer row: show what is already known, or go and ask. */
     fun open() {
-        if (_state.value is UpdateState.Idle) checkNow() else _visible.value = true
+        when (_state.value) {
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready -> _visible.value = true
+            // A failure is a question worth re-asking, not a dialog worth re-reading.
+            else -> checkNow()
+        }
     }
 
     fun retry() {
