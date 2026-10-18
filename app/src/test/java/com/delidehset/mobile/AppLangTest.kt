@@ -22,7 +22,7 @@ class AppLangTest {
     fun `every phrase is written in all eight languages`() {
         assertTrue("sözlük beklenmedik kadar küçük: ${phrases.size}", phrases.size >= 150)
         for (phrase in phrases) {
-            for (lang in AppLang.entries) {
+            for (lang in spokenLanguages()) {
                 assertTrue(
                     "${lang.code}: \"${phrase.tr}\" boş",
                     phrase.inLang(lang).isNotBlank(),
@@ -46,7 +46,7 @@ class AppLangTest {
 
     @Test
     fun `every language is different from the others`() {
-        for (lang in AppLang.entries) {
+        for (lang in spokenLanguages()) {
             // Turkish is the source, so of course it matches itself; the others are the
             // ones that have to differ — a handful of shared words is normal ("profil"
             // is "profil" in French), a whole language's worth is a copy.
@@ -55,14 +55,31 @@ class AppLangTest {
             assertTrue("${lang.code}: $same satır çevrilmemiş", same <= 6)
         }
         // A table that was copied instead of translated is not a translation.
-        val tables = AppLang.entries.associateWith { lang -> phrases.map { it.inLang(lang) } }
-        for (a in AppLang.entries) {
-            for (b in AppLang.entries) {
+        val tables = spokenLanguages().associateWith { lang -> phrases.map { it.inLang(lang) } }
+        for (a in spokenLanguages()) {
+            for (b in spokenLanguages()) {
                 if (a >= b) continue
                 val shared = tables.getValue(a).filterIndexed { index, line -> line == tables.getValue(b)[index] }.size
                 assertTrue("${a.code} ve ${b.code} aynı: $shared satır", shared < phrases.size / 2)
             }
         }
+    }
+
+    /**
+     * Yavşarca is an easter egg, not a translation: it has no column in [phrases], it is not
+     * offered with the others, and it must leave somebody else's own writing alone.
+     */
+    @Test
+    fun `the joke language stays a joke`() {
+        assertEquals(true, AppLang.YAVSAR.easter)
+        assertEquals(1, AppLang.entries.count { it.easter })
+        assertEquals("Kuzen Muhabbeti", translate(AppLang.YAVSAR, "Sohbet"))
+        assertEquals("Hurdacı ayarları", translate(AppLang.YAVSAR, "Ayarlar"))
+        // A long line is a post, a bio or a comment — not a label to be rewritten.
+        val long = "Merhaba ülkemizde birçok bölgede birçok geleneksel tedavi yöntemi uygulanmaktadır"
+        assertEquals(long, translate(AppLang.YAVSAR, long))
+        // The site does not speak it, so the code must not be one of the site's either.
+        assertTrue(spokenLanguages().none { it.code == AppLang.YAVSAR.code })
     }
 
     @Test
@@ -165,6 +182,9 @@ class AppLangTest {
             .toList()
     }
 
+    /** The site's own languages, which are the ones with a column in the dictionary. */
+    private fun spokenLanguages(): List<AppLang> = AppLang.entries.filterNot { it.easter }
+
     private fun looksTurkish(line: String): Boolean {
         if (line.isBlank() || line.length < 2) return false
         if (line.startsWith("http") || line.contains("%s") || line.contains("&")) return false
@@ -176,7 +196,9 @@ class AppLangTest {
     }
 
     private companion object {
-        val TRANSLATION_FILES = setOf("AppLang.kt", "AppText.kt", "Translations.kt")
+        // The dictionary files write Turkish on purpose: they are the translations, not
+        // lines waiting for one.
+        val TRANSLATION_FILES = setOf("AppLang.kt", "AppText.kt", "Translations.kt", "Yavsar.kt")
         const val TURKISH_LETTERS = "çğıöşüÇĞİÖŞÜ"
 
         /** Turkish lines that happen to use no Turkish-only letter. */

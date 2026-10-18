@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -56,8 +57,10 @@ import androidx.media3.ui.PlayerView
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.DeliShapes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 /** File endings the site actually uploads; anything else is treated as a picture. */
 fun isVideoUrl(url: String?): Boolean {
@@ -305,12 +308,31 @@ fun DeliVideoPlayer(
     }
 }
 
-/** A still frame with the play badge a feed card shows instead of loading the video. */
+/**
+ * A frame of the clip with the play badge, which is what a feed card shows instead of
+ * loading the video.
+ *
+ * The site's own stand-in is a link icon, not a frame, so a video post used to reach the
+ * feed as a plain black rectangle with a triangle in it. When there is no usable picture
+ * the first frame is taken out of the clip itself once per URL and kept in memory: the
+ * card then shows the picture the site shows — the video's own opening shot.
+ */
 @Composable
-fun VideoThumb(url: String?, modifier: Modifier = Modifier) {
-    // The site's stand-in thumbnail is a link icon, not a frame of the clip; on its own it
-    // reads as a broken picture, so a black frame with the play badge is shown instead.
+fun VideoThumb(url: String?, videoUrl: String? = null, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val still = url?.takeIf { it.isNotBlank() && !it.contains("default_thumb") }
+    val absolute = videoUrl?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("http")) it else "https://delidehset.com$it" }
+
+    var frame by remember(absolute) { mutableStateOf(absolute?.let { frames[it] }) }
+    LaunchedEffect(absolute, still) {
+        if (still != null || absolute == null || frame != null) return@LaunchedEffect
+        frame = withContext(Dispatchers.IO) {
+            frames[absolute] ?: runCatching { firstFrame(context, absolute) }
+                .getOrNull()
+                ?.also { frames[absolute] = it }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -319,7 +341,21 @@ fun VideoThumb(url: String?, modifier: Modifier = Modifier) {
             .background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        if (still != null) {
+        val shot = frame
+        if (shot != null) {
+            androidx.compose.foundation.Image(
+                bitmap = shot.asImageBitmap(),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            // The badge sits on the picture, so the picture is darkened where it does.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.25f)),
+            )
+        } else if (still != null) {
             androidx.compose.foundation.Image(
                 painter = coil.compose.rememberAsyncImagePainter(
                     model = if (still.startsWith("http")) still else "https://delidehset.com$still"
@@ -343,6 +379,28 @@ fun VideoThumb(url: String?, modifier: Modifier = Modifier) {
                 modifier = Modifier.size(28.dp),
             )
         }
+    }
+}
+
+/** The frames taken out of clips in this session, so scrolling does not re-decode them. */
+private val frames = java.util.concurrent.ConcurrentHashMap<String, android.graphics.Bitmap>()
+
+/**
+ * The clip's first frame, or the one a second in for clips that open on black.
+ *
+ * `MediaMetadataRetriever` reads the container itself, so this costs one network read per
+ * URL and then lives in [frames].
+ */
+private fun firstFrame(context: android.content.Context, url: String): android.graphics.Bitmap? {
+    val retriever = android.media.MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(url, emptyMap<String, String>())
+        retriever.getFrameAtTime(1_000_000L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            ?: retriever.frameAtTime
+    } catch (t: Throwable) {
+        null
+    } finally {
+        runCatching { retriever.release() }
     }
 }
 

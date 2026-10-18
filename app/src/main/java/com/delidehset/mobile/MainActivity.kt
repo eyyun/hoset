@@ -44,6 +44,7 @@ import com.delidehset.mobile.ui.screens.LoginScreen
 import com.delidehset.mobile.ui.screens.PageScreen
 import com.delidehset.mobile.ui.screens.PostScreen
 import com.delidehset.mobile.ui.screens.ProfileScreen
+import com.delidehset.mobile.ui.UpdateSummaryDialog
 import com.delidehset.mobile.ui.screens.RandomScreen
 import com.delidehset.mobile.ui.screens.RelationsScreen
 import com.delidehset.mobile.ui.screens.SearchScreen
@@ -130,17 +131,14 @@ private fun DeliRoot() {
         appMessage?.let { snackbar.showSnackbar(it); appVm.consumeMessage() }
     }
 
-    val showBack = currentRoute.startsWith("post") ||
-        currentRoute.startsWith("user") ||
-        currentRoute.startsWith("page") ||
-        currentRoute.startsWith("random") ||
-        currentRoute.startsWith("web") ||
-        currentRoute.startsWith("account") ||
-        currentRoute.startsWith("settings") ||
-        currentRoute.startsWith("themes") ||
-        currentRoute.startsWith("hoset") ||
-        currentRoute.startsWith("notifications") ||
-        currentRoute.startsWith("contact")
+    // Anything the person can come back from gets an arrow. This used to be a hand-written
+    // list of routes, which meant every newly added screen — the follower lists, for one —
+    // arrived with a menu icon and no way out except the system back gesture.
+    val showBack = nav.previousBackStackEntry != null
+
+    // Says what changed, once, the first time this version runs. A dialog renders over
+    // everything, so where it sits in the tree does not matter.
+    UpdateSummaryDialog(BuildConfig.VERSION_NAME)
 
     DeliScaffold(
         title = translate(lang, titleFor(currentRoute, backStack?.arguments)),

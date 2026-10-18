@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -27,7 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import com.delidehset.mobile.ui.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +50,7 @@ import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
+import com.delidehset.mobile.data.AvatarStore
 import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.avatarShape
@@ -78,19 +84,41 @@ fun DeliAvatar(
     val shape = avatarShape(DeliColors.palette)
     // The site serves a stock picture for accounts without one; showing it next to the
     // app's own placeholder is what made avatars look inconsistent between screens.
-    val full = url
+    val given = url?.takeIf { it.isNotBlank() && !it.contains("default-profile-pic") }
+
+    // Where the site gave no picture but did give a name — comment rows, the user tables,
+    // a post's author line — the account is looked up once. Without this the app showed a
+    // bare initial on accounts the website shows a face for.
+    var looked by remember(name, given) { mutableStateOf(AvatarStore.cached(name)) }
+    LaunchedEffect(name, given) {
+        if (given != null || name.isNullOrBlank() || isAnonymous(name)) return@LaunchedEffect
+        val app = context.applicationContext as? com.delidehset.mobile.DeliApp ?: return@LaunchedEffect
+        val repository = runCatching { app.container.repository }.getOrNull() ?: return@LaunchedEffect
+        looked = AvatarStore.remember(repository, name)
+    }
+
+    val full = (given ?: looked)
         ?.takeIf { it.isNotBlank() && !it.contains("default-profile-pic") }
         ?.let { if (it.startsWith("http")) it else DeliHttp.BASE_URL + it }
 
     if (full == null) {
-        InitialAvatar(
-            name = name,
-            size = size,
-            shape = shape,
-            modifier = modifier,
-            contentDescription = contentDescription,
-            accent = accent,
-        )
+        if (isAnonymous(name)) {
+            AnonymousAvatar(
+                size = size,
+                shape = shape,
+                modifier = modifier,
+                contentDescription = contentDescription,
+            )
+        } else {
+            InitialAvatar(
+                name = name,
+                size = size,
+                shape = shape,
+                modifier = modifier,
+                contentDescription = contentDescription,
+                accent = accent,
+            )
+        }
         return
     }
 
@@ -109,6 +137,12 @@ fun DeliAvatar(
         // initial every other account without a picture gets.
         if (painter.state is AsyncImagePainter.State.Success) {
             SubcomposeAsyncImageContent()
+        } else if (isAnonymous(name)) {
+            AnonymousAvatar(
+                size = size,
+                shape = shape,
+                contentDescription = contentDescription,
+            )
         } else {
             InitialAvatar(
                 name = name,
@@ -118,6 +152,40 @@ fun DeliAvatar(
                 accent = accent,
             )
         }
+    }
+}
+
+/** The site's anonymised author: a name that stands for nobody in particular. */
+private fun isAnonymous(name: String?): Boolean =
+    name != null && name.trim().equals("Anonymous", ignoreCase = true)
+
+/**
+ * What an anonymous author gets instead of a letter.
+ *
+ * There is nobody behind the name to give a colour to, and a lone "A" on a tinted square
+ * read as a picture that failed to load rather than as a nameless account.
+ */
+@Composable
+private fun AnonymousAvatar(
+    size: Dp,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .background(DeliColors.SurfaceVariant)
+            .border(1.dp, DeliColors.Border, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.PersonOff,
+            contentDescription = contentDescription,
+            tint = DeliColors.OnSurfaceVariant,
+            modifier = Modifier.size(size * 0.6f),
+        )
     }
 }
 

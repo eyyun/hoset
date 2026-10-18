@@ -31,12 +31,17 @@ internal class Phrase(
         AppLang.PT_BR -> pt
         AppLang.RU -> ru
         AppLang.JA -> ja
+        // The joke language has no column of its own: it re-says the Turkish.
+        AppLang.YAVSAR -> tr
     }
 }
 
 /** The line, in the language the user picked. Unknown text — a name, a title — is left alone. */
 fun translate(lang: AppLang, text: String): String {
     if (lang == AppLang.TR) return text
+    // Not a table of its own: the joke language rewrites the Turkish that is already there,
+    // so a line nobody thought to translate still comes out in it (see Yavsar.say).
+    if (lang == AppLang.YAVSAR) return Yavsar.say(text)
     return byLang.getValue(lang)[text] ?: text
 }
 
@@ -489,6 +494,12 @@ internal val phrases: List<Phrase> = listOf(
     Phrase("Önbelleği temizle", "Clear cache", "Cache leeren", "Vaciar caché", "Vider le cache", "Limpar cache", "Очистить кэш", "キャッシュを消去"),
     Phrase("Kayıtlı sayfa ve görsel önbelleğini sıfırlar.", "Clears cached pages and images.", "Löscht gespeicherte Seiten und Bilder aus dem Cache.", "Borra las páginas e imágenes guardadas en caché.", "Efface les pages et images mises en cache.", "Limpa páginas e imagens salvas no cache.", "Очищает сохранённые страницы и изображения.", "保存されたページと画像のキャッシュを消去します。"),
     Phrase("Sayfa ve görsel önbelleği temizlendi.", "Page and image cache cleared.", "Seiten- und Bild-Cache geleert.", "Caché de páginas e imágenes vaciada.", "Cache des pages et images vidé.", "Cache de páginas e imagens limpo.", "Кэш страниц и изображений очищен.", "ページと画像のキャッシュを消去しました。"),
+    Phrase("Güncellendi", "Updated", "Aktualisiert", "Actualizado", "Mis à jour", "Atualizado", "Обновлено", "アップデートしました"),
+    Phrase("Profil fotoğrafları artık yorumlarda, gönderilerde ve listelerde görünüyor.", "Profile pictures now show in comments, posts and lists.", "Profilbilder erscheinen jetzt in Kommentaren, Beiträgen und Listen.", "Las fotos de perfil ahora aparecen en comentarios, publicaciones y listas.", "Les photos de profil apparaissent maintenant dans les commentaires, les publications et les listes.", "As fotos de perfil agora aparecem em comentários, publicações e listas.", "Фотографии профиля теперь видны в комментариях, записях и списках.", "プロフィール写真がコメントや投稿、一覧にも表示されるようになりました。"),
+    Phrase("Yorum, takipçi ve takip listelerindeki hatalar düzeltildi.", "Fixed the comment thread and the follower and following lists.", "Kommentare sowie Follower- und Folge-Listen wurden korrigiert.", "Se corrigieron los comentarios y las listas de seguidores y seguidos.", "Les commentaires et les listes d'abonnés et d'abonnements ont été corrigés.", "Os comentários e as listas de seguidores e seguindo foram corrigidos.", "Исправлены комментарии и списки подписчиков и подписок.", "コメントとフォロワー・フォロー一覧の不具合を修正しました。"),
+    Phrase("Video gönderileri kendi karesini gösteriyor.", "Video posts show their own frame.", "Videobeiträge zeigen ihr eigenes Standbild.", "Las publicaciones con vídeo muestran su propio fotograma.", "Les publications vidéo affichent leur propre image.", "As publicações com vídeo mostram o próprio quadro.", "Записи с видео показывают свой кадр.", "動画の投稿は自分のフレームを表示します。"),
+    Phrase("Geri düğmesi her ekranda çalışıyor.", "The back button works on every screen.", "Die Zurück-Taste funktioniert auf jedem Bildschirm.", "El botón de volver funciona en todas las pantallas.", "Le bouton retour fonctionne sur tous les écrans.", "O botão de voltar funciona em todas as telas.", "Кнопка «назад» работает на каждом экране.", "戻るボタンがどの画面でも機能します。"),
+    Phrase("Sohbet daha hızlı açılıyor.", "Chat opens faster.", "Der Chat öffnet schneller.", "El chat se abre más rápido.", "Le chat s'ouvre plus vite.", "O bate-papo abre mais rápido.", "Чат открывается быстрее.", "チャットがより速く開きます。"),
 )
 
 /**
@@ -522,7 +533,8 @@ fun tr(text: String): String = translate(CurrentLang.lang, text)
 fun trf(template: String, vararg values: Any?): String = fill(tr(template), *values)
 
 private val byLang: Map<AppLang, Map<String, String>> by lazy {
-    AppLang.entries.associateWith { lang ->
+    // The joke language is not in this table; it does not translate, it improvises.
+    AppLang.entries.filterNot { it.easter }.associateWith { lang ->
         val map = HashMap<String, String>(phrases.size * 2)
         for (phrase in phrases) map[phrase.tr] = phrase.inLang(lang)
         map

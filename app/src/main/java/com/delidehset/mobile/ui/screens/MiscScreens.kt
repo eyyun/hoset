@@ -2,7 +2,9 @@ package com.delidehset.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -385,6 +387,7 @@ fun BadgesScreen(contentPadding: PaddingValues) {
  * "Profili Düzenle" button) is the screen behind the Profil tab, so this one only holds
  * the two settings pages and the sign-out row.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     contentPadding: PaddingValues,
@@ -495,10 +498,16 @@ fun SettingsScreen(
                 .kitSurface(padding = 0.dp),
         ) {
             var open by remember { mutableStateOf(false) }
+            // A long press here is the way into Yavşarca: it is not one of the site's
+            // languages, so it is not offered with them — someone who wants it gets it by
+            // holding the row they would change the language from.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { open = true }
+                    .combinedClickable(
+                        onClick = { open = true },
+                        onLongClick = { onLangChange(AppLang.YAVSAR) },
+                    )
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -521,7 +530,9 @@ fun SettingsScreen(
                 )
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = DeliColors.Surface) {
-                for (option in AppLang.entries) {
+                // The joke language is only listed once it is the one in force, so it can
+                // always be left again; otherwise it is found, not offered.
+                for (option in AppLang.entries.filter { !it.easter || it == lang }) {
                     val active = option == lang
                     DropdownMenuItem(
                         text = {

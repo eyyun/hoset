@@ -183,6 +183,8 @@ data class UserProfile(
      * history link, the page's own tabs, and whether the viewer can moderate here.
      */
     val bannerUrl: String? = null,
+    /** `o/onun`, `fae/faeself` — the account's own pronouns, when it set any. */
+    val pronouns: String? = null,
     val operator: Boolean = false,
     val followers: Int? = null,
     val following: Int? = null,

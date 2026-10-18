@@ -32,17 +32,20 @@ class AppContainer(context: Context) {
     /**
      * The session, for pictures.
      *
-     * This site serves `/avatar/…` only to signed-in requests — without the cookies every
-     * avatar came back as a redirect to `/login`, which is why the app showed initials
-     * everywhere while the site showed faces. Redirects are followed here (the page client
-     * inspects them itself, so it deliberately does not), and a disk cache keeps the
-     * pictures between launches.
+     * This site serves an avatar only to signed-in requests — without the cookies they came
+     * back as a redirect to `/login`, which is why the app showed initials everywhere while
+     * the site showed faces. Redirects are followed here (the page client inspects them
+     * itself, so it deliberately does not).
+     *
+     * The caching is Coil's, not this client's: an HTTP cache stores whole *responses* by
+     * URL, so a single signed-out fetch of an avatar was replayed as a login page for that
+     * URL long after the session worked, and the app kept drawing initials with no way
+     * back. Coil's own disk cache only keeps pictures it managed to decode.
      */
     val imageClient: OkHttpClient = OkHttpClient.Builder()
         .cookieJar(cookies)
         .followRedirects(true)
         .followSslRedirects(true)
-        .cache(okhttp3.Cache(java.io.File(appContext.cacheDir, "images"), 20L * 1024 * 1024))
         .build()
 
     /**

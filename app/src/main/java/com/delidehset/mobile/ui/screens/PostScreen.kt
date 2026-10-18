@@ -96,7 +96,18 @@ fun PostScreen(
         val real = flatten(state.comments)
         val pending = state.posted
         if (pending == null || real.any { it.first.id == pending.id }) real
-        else real + (pending to 0)
+        else if (pending.parentId == null) real + (pending to 0)
+        else {
+            val parentAt = real.indexOfFirst { it.first.id == pending.parentId }
+            if (parentAt < 0) {
+                real + (pending to pending.depth)
+            } else {
+                // Straight after the subtree of the comment it answers.
+                var end = parentAt + 1
+                while (end < real.size && real[end].second > real[parentAt].second) end++
+                real.toMutableList().apply { add(end, pending to pending.depth) }
+            }
+        }
     }
 
     // The first four rows are the header, the body, the actions and the composer; every

@@ -225,6 +225,17 @@ fun ProfileScreen(
                                 }
                             }
 
+                            // The account's own pronouns, where the site prints them.
+                            profile.pronouns?.let { pronouns ->
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    pronouns,
+                                    color = DeliColors.OnSurfaceVariant,
+                                    fontSize = 13.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                )
+                            }
+
                             profile.joinedAgo?.let {
                                 Spacer(Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {

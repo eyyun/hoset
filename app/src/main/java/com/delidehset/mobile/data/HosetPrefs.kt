@@ -33,6 +33,7 @@ object HosetPrefs {
     private const val KEY_HIDE_NSFW_MEDIA = "hide_nsfw_media"
     private const val KEY_COMPACT_FEED = "compact_feed"
     private const val KEY_AUTO_UPDATE = "auto_update"
+    private const val KEY_LAST_VERSION = "last_version"
 
     val appTitleState = mutableStateOf("Hoset")
     val fontScaleState = mutableFloatStateOf(1.0f)
@@ -89,6 +90,20 @@ object HosetPrefs {
     fun setCompactFeed(context: Context, compact: Boolean) {
         prefs(context).edit().putBoolean(KEY_COMPACT_FEED, compact).apply()
         compactFeedState.value = compact
+    }
+
+    /**
+     * The version this install last ran.
+     *
+     * Null means the app has never run here — a fresh install, which is told nothing about
+     * what changed, because there is no previous version on this phone for it to have
+     * changed from.
+     */
+    fun lastVersion(context: Context): String? =
+        prefs(context).getString(KEY_LAST_VERSION, null)?.takeIf { it.isNotBlank() }
+
+    fun setLastVersion(context: Context, version: String) {
+        prefs(context).edit().putString(KEY_LAST_VERSION, version).apply()
     }
 
     fun autoUpdate(context: Context): Boolean =

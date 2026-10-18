@@ -285,6 +285,31 @@ object HtmlParser {
         )
     }
 
+    /**
+     * A count as the site prints it: `1`, `1,234`, `12.3k`, `1.2K`, `1.4m`.
+     *
+     * Reading only the leading digits — which is what the profile used to do — turned 12.3k
+     * followers into 12, and a thousand into 1.
+     */
+    internal fun countOf(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val match = Regex("(\\d[\\d.,]*)\\s*([kKmMbB])?").find(text) ?: return null
+        val raw = match.groupValues[1].trimEnd('.', ',')
+        val suffix = match.groupValues[2].lowercase()
+        val value = if (suffix.isEmpty()) {
+            raw.filter { it.isDigit() }.toLongOrNull()
+        } else {
+            raw.replace(",", ".").toDoubleOrNull()?.times(
+                when (suffix) {
+                    "k" -> 1_000.0
+                    "m" -> 1_000_000.0
+                    else -> 1_000_000_000.0
+                }
+            )?.toLong()
+        } ?: return null
+        return value.toString()
+    }
+
     fun parseUsers(html: String): List<SiteUser> {
         val doc = document(html)
         return doc.select("table tbody tr").mapNotNull { row ->
@@ -475,10 +500,8 @@ object HtmlParser {
         // The profile page labels every field with its own id. Reading those directly is
         // what the site's own JavaScript does; `.text-muted` here is the *bio*, not the
         // join line, which is why the screen used to print "Katılım: No bio...".
-        val followers = main.selectFirst("#profile--followers")?.text()?.trim()
-            ?.let { Regex("\\d+").find(it)?.value }
-        val following = main.selectFirst("#profile--following")?.text()?.trim()
-            ?.let { Regex("\\d+").find(it)?.value }
+        val followers = countOf(main.selectFirst("#profile--followers")?.text())
+        val following = countOf(main.selectFirst("#profile--following")?.text())
         val coins = main.selectFirst("#profile-coins-amount")?.text()?.trim()
         val stats = buildList {
             followers?.let { add(KeyValue("Takipçi", it)) }
@@ -515,6 +538,14 @@ object HtmlParser {
         // The broom next to the name: the site marks operators this way, and nothing else
         // on the page says it.
         val operator = main.selectFirst("#profile--mop") != null
+        // The account's own pronouns, which the site prints under the name. The app could
+        // already *set* them in the account settings and never showed them here.
+        val pronouns = main.selectFirst("#profile--pronouns")?.text()?.trim()?.let { text ->
+            Regex("(pronouns?|zamirler?)\\s*:?\\s*", RegexOption.IGNORE_CASE)
+                .replaceFirst(text, "")
+                .trim()
+                .takeIf { it.isNotBlank() }
+        }
 
         val moderation = main.selectFirst("a[href*=target_id=]")?.attr("href")
             ?.takeIf { it.isNotBlank() }
@@ -562,6 +593,7 @@ object HtmlParser {
             },
             postDays = parsePostDays(main),
             bannerUrl = banner,
+            pronouns = pronouns,
             operator = operator,
             followers = followers?.toIntOrNull(),
             following = following?.toIntOrNull(),

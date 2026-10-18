@@ -123,7 +123,11 @@ class ChatBridge(
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
+        // The room is the same page and the same 1 MB script every time it is opened; asking
+        // the network for them again on each visit is what made the screen arrive slowly and
+        // stutter while it caught up. The cache is preferred and the network is the fallback,
+        // so the first visit of a session still gets a fresh page.
+        settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
         // The voice call plays remote audio without any tap on this page, so the room's
         // own playback must not be held behind the autoplay gesture requirement.
         settings.mediaPlaybackRequiresUserGesture = false

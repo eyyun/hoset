@@ -6,6 +6,7 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl
@@ -644,6 +645,31 @@ class DeliRepository(
 
     suspend fun holeInfo(name: String, force: Boolean = false): Hole? =
         HtmlParser.parseHoleHeader(page("/h/$name", force))
+
+    /**
+     * A user's picture, from the endpoint the site's own hovercards call.
+     *
+     * The feed's JSON carries `author_avatar`, but a comment row and a row in the user
+     * tables only carry the name. This is the one call that turns a name into a face;
+     * [AvatarStore] remembers the answer, so a thread costs one request per person rather
+     * than one per row.
+     */
+    suspend fun profilePicture(name: String): String? {
+        val url = HttpUrl.Builder()
+            .scheme("https")
+            .host("delidehset.com")
+            .addPathSegment("api")
+            .addPathSegment("profile")
+            .addPathSegment(name)
+            .build()
+            .toString()
+        val res = runCatching { http.get(url, accept = "application/json") }.getOrNull() ?: return null
+        if (!res.isSuccess) return null
+        val pic = runCatching {
+            json.parseToJsonElement(res.body).jsonObject["profile_pic"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+        return pic?.takeIf { it.isNotBlank() && !it.contains("default-profile-pic") }
+    }
 
     suspend fun users(force: Boolean = false): List<SiteUser> =
         HtmlParser.parseUsers(page("/users", force))

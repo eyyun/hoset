@@ -127,7 +127,8 @@ fun PostCard(
         val showMedia = !compact && !(post.nsfw && hideNsfw)
         if (showMedia && video != null) {
             Spacer(Modifier.height(8.dp))
-            VideoThumb(url = image, modifier = Modifier.fillMaxWidth())
+            // The clip's own frame stands in when the site has no picture for it.
+            VideoThumb(url = image, videoUrl = video, modifier = Modifier.fillMaxWidth())
         } else if (showMedia && image != null && !isVideoUrl(image)) {
             Spacer(Modifier.height(8.dp))
             AsyncImage(

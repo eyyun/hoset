@@ -240,6 +240,18 @@ fun ChatScreen(
         }
     }
 
+    // Opening the keyboard shrinks the room without adding a line, so nothing above moved
+    // the list: the newest lines stayed behind the keyboard and the screen looked stuck
+    // wherever it happened to be. Follow the bottom edge itself, not just new text, and
+    // wait for the keyboard to finish sliding so the last line is measured where it lands.
+    val keyboardUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    LaunchedEffect(keyboardUp) {
+        if (keyboardUp && chat.messages.isNotEmpty()) {
+            kotlinx.coroutines.delay(180)
+            listState.animateScrollToItem(chat.messages.lastIndex)
+        }
+    }
+
     // The scaffold above already lifts the whole screen for the keyboard.
     Column(
         modifier = Modifier

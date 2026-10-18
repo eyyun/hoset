@@ -72,7 +72,9 @@ class AppViewModel(
     fun setLang(lang: AppLang) {
         viewModelScope.launch(Dispatchers.IO) {
             langStore.save(lang.code)
-            if (_viewer.value.isSignedIn) runCatching { repo.saveLanguage(lang.code) }
+            // A joke language is the app's own: the site's list is `tr, en, de, …`, and
+            // sending it `yavsar` would either be ignored or set something unintended.
+            if (!lang.easter && _viewer.value.isSignedIn) runCatching { repo.saveLanguage(lang.code) }
         }
     }
 
@@ -390,10 +392,14 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
 
     fun load(permalink: String, force: Boolean = false) {
         if (!force && this.permalink == permalink && _state.value.post != null) return
+        // Opening a post re-reads it: the page cache is what made a thread look frozen — a
+        // post opened an hour later still showed the comments it had then, and a reply
+        // somebody else had left in between never arrived.
+        val fresh = force || this.permalink != permalink
         this.permalink = permalink
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { repo.post(permalink, force) }
+            runCatching { repo.post(permalink, fresh) }
                 .onSuccess { page ->
                     _state.update {
                         it.copy(
@@ -455,10 +461,13 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
             _state.update { it.copy(sending = false, replyTo = null) }
             if (res?.ok == true) {
                 val cid = res.commentId()
+                // A reply is drawn where it belongs — under the comment it answers — instead
+                // of at the end of the thread, where it read as one more new comment.
+                val parent = s.replyTo
                 val local = CommentNode(
                     id = cid ?: "local-${System.currentTimeMillis()}",
-                    parentId = null,
-                    depth = 0,
+                    parentId = parent?.id,
+                    depth = if (parent == null) 0 else parent.depth + 1,
                     authorName = authorName,
                     authorHref = authorName?.let { "/@$it" },
                     authorAvatar = null,
