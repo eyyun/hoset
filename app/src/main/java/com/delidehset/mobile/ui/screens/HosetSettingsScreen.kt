@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -94,6 +95,10 @@ fun HosetSettingsScreen(
     contentPadding: PaddingValues,
     onOpenThemeStore: () -> Unit,
     onCheckUpdates: () -> Unit,
+    /** The releases list, once it has been asked for. */
+    history: List<com.delidehset.mobile.data.UpdateInfo>? = null,
+    onLoadHistory: () -> Unit = {},
+    onInstallVersion: (com.delidehset.mobile.data.UpdateInfo) -> Unit = {},
 ) {
     val context = LocalContext.current
     val container = deliContainer()
@@ -113,6 +118,9 @@ fun HosetSettingsScreen(
     var compactFeed by remember { mutableStateOf(HosetPrefs.compactFeed(context)) }
     var autoUpdate by remember { mutableStateOf(HosetPrefs.autoUpdate(context)) }
     var cacheCleared by remember { mutableStateOf(false) }
+    var experimental by remember { mutableStateOf(HosetPrefs.experimental(context)) }
+    var reduceMotion by remember { mutableStateOf(HosetPrefs.reduceMotion(context)) }
+    var showHistory by remember { mutableStateOf(false) }
 
     // The gallery, through the platform picker: no storage permission is asked for, and the
     // app never sees more than the one picture that was chosen.
@@ -219,6 +227,64 @@ fun HosetSettingsScreen(
                 title = t("Yazı boyutu"),
                 subtitle = "%${(fontScale * 100).toInt()}",
                 onClick = { showFontDialog = true },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.Refresh,
+                tint = DeliColors.OnSurfaceVariant,
+                title = t("Hareketleri azalt"),
+                subtitle = t("Ekran geçişlerini ve listeleri sadeleştirir."),
+                checked = reduceMotion,
+                onToggle = { on ->
+                    reduceMotion = on
+                    HosetPrefs.setReduceMotion(context, on)
+                },
+            )
+        }
+
+        SettingsGroupTitle(t("Güncellemeler"))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .kitSurface(padding = 0.dp),
+        ) {
+            HosetToggleRow(
+                icon = Icons.Filled.Code,
+                tint = DeliColors.Warning,
+                title = t("Deneysel sürümler"),
+                subtitle = t("Ön sürümleri alır. Kararsız olabilir."),
+                checked = experimental,
+                onToggle = { on ->
+                    experimental = on
+                    HosetPrefs.setExperimental(context, on)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.History,
+                tint = DeliColors.Blue,
+                title = t("Sürüm geçmişi"),
+                subtitle = t("Eski bir sürüme dönmek için Android önce uygulamayı kaldırmanı isteyebilir."),
+                onClick = {
+                    showHistory = true
+                    onLoadHistory()
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetRow(
+                icon = Icons.Filled.Refresh,
+                tint = DeliColors.Success,
+                title = t("Güncellemeyi denetle"),
+                subtitle = t("Yeni bir sürüm var mı bak."),
+                onClick = onCheckUpdates,
             )
         }
 
@@ -574,6 +640,62 @@ fun HosetSettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showSortDialog = false }) { Text(t("Kapat"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
+    }
+
+    // Every published release, newest first. The list is also the downgrade path: the
+    // installer will refuse a lower versionCode over a higher one, which the subtitle of
+    // the row that opens this already says.
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            containerColor = DeliColors.Surface,
+            title = { Text(t("Sürüm geçmişi"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val releases = history
+                    if (releases == null) {
+                        Text(t("Yükleniyor…"), color = DeliColors.OnSurfaceVariant, fontSize = 13.sp)
+                    } else if (releases.isEmpty()) {
+                        Text(t("Sürümler okunamadı."), color = DeliColors.OnSurfaceVariant, fontSize = 13.sp)
+                    } else {
+                        for (info in releases) {
+                            val installed = info.version == BuildConfig.VERSION_NAME
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        info.version + if (info.prerelease) " · " + t("Ön sürüm") else "",
+                                        color = DeliColors.OnBackground,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    if (installed) {
+                                        Text(t("Kurulu sürüm"), color = DeliColors.Success, fontSize = 11.sp)
+                                    }
+                                }
+                                if (!installed) {
+                                    TextButton(onClick = { onInstallVersion(info) }) {
+                                        Text(t("İndir ve kur"), color = DeliColors.Primary, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHistory = false }) {
+                    Text(t("Kapat"), color = DeliColors.OnSurfaceVariant)
+                }
             },
         )
     }

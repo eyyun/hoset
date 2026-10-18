@@ -3,6 +3,8 @@ package com.delidehset.mobile.data
 import com.delidehset.mobile.ui.tr
 import com.delidehset.mobile.ui.trf
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
@@ -433,6 +435,46 @@ class DeliRepository(
     suspend fun holeState(hole: String): HoleState =
         HtmlParser.parseHoleState(page("/h/" + encodeSegment(hole)))
 
+    /**
+     * Whether a community shows itself to this account at all.
+     *
+     * A private community answers 403 with its lock screen, which is an answer and not a
+     * failure — so this reads it directly instead of going through [page], whose job is to
+     * throw on anything that is not a page.
+     */
+    suspend fun holeAccess(hole: String): HoleAccess {
+        val path = "/h/" + encodeSegment(hole)
+        val res = runCatching { http.get(path) }.getOrNull() ?: return HoleAccess()
+        val lock = HtmlParser.parseHoleLock(res.body)
+        // A public community's page has no lock screen and parseHoleLock says null.
+        return lock ?: HoleAccess()
+    }
+
+    /**
+     * Asks to join a private community, with the reason its moderators will read.
+     *
+     * The site's own join dialog posts the same route with a `reason` field and answers
+     * `I_JOIN_REQUESTED`; that message is what the app says back, instead of a generic
+     * "done" that leaves the person unsure whether the request was sent.
+     */
+    suspend fun requestJoin(hole: String, reason: String): ActionResult {
+        ensureAntiforgery()
+        val name = encodeSegment(hole)
+        val res = http.postForm(
+            "/h/$name/follow",
+            listOf("reason" to reason.take(500)),
+            referer = "/h/$name",
+        )
+        val asked = res.body.contains("I_JOIN_REQUESTED") || res.body.contains("awaiting", true)
+        val done = if (asked) {
+            ActionResult(true, tr("Katılma isteğin gönderildi. Onay bekleniyor."), res)
+        } else {
+            interpret(res, tr("Katılma isteği"))
+        }
+        cache.clear()
+        return done
+    }
+
     /** Hiding a whole community from the feed, the page's eye-slash button. */
     suspend fun blockHole(hole: String, block: Boolean): ActionResult {
         ensureAntiforgery()
@@ -682,8 +724,88 @@ class DeliRepository(
     suspend fun usersAt(path: String, force: Boolean = false): List<SiteUser> =
         HtmlParser.parseUsers(page(path, force))
 
-    suspend fun profile(name: String, force: Boolean = false): UserProfile =
-        HtmlParser.parseProfile(page("/@$name", force), name)
+    /**
+     * A profile, with the counters the site's own header gets wrong.
+     *
+     * Following somebody leaves the profile header still saying "follows 0 users" — the
+     * page is rendered from a count that is not refreshed — while the list behind that
+     * link is a page long. The two list headings are the honest numbers, so they are read
+     * alongside the profile and take precedence over the header's. They are cached like
+     * any other page, and the profile still renders even if they fail.
+     */
+    suspend fun profile(name: String, force: Boolean = false): UserProfile = coroutineScope {
+        val profile = async { HtmlParser.parseProfile(page("/@$name", force), name) }
+        val followers = async {
+            runCatching { HtmlParser.parseRelationTotal(page("/@$name/followers", force)) }.getOrNull()
+        }
+        val following = async {
+            runCatching { HtmlParser.parseRelationTotal(page("/@$name/following", force)) }.getOrNull()
+        }
+        val parsed = profile.await()
+        parsed.copy(
+            followers = followers.await() ?: parsed.followers,
+            following = following.await() ?: parsed.following,
+        )
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  A community's own settings                                        */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * `/h/{hole}/settings` — the general tab, where the display name, the picture and the
+     * content filters live. The site only answers this to the people who run the community;
+     * [HoleSettings.canEdit] is the page's own answer to whether this account may write.
+     */
+    suspend fun holeSettings(hole: String, force: Boolean = false): HoleSettings? {
+        val name = encodeSegment(hole)
+        val body = runCatching { page("/h/$name/settings?tab=general", force) }.getOrNull() ?: return null
+        return HtmlParser.parseHoleSettings(body, hole)
+    }
+
+    suspend fun saveHoleSettings(hole: String, displayName: String, blockedIps: String, blockedWords: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val display = http.postForm(
+            "/h/$name/display_name",
+            listOf("display_name" to displayName),
+            referer = "/h/$name/settings?tab=general",
+        )
+        val filters = http.postForm(
+            "/h/$name/settings/content-filters",
+            listOf("blocked_ip_ranges" to blockedIps, "blocked_words" to blockedWords),
+            referer = "/h/$name/settings?tab=filters",
+        )
+        cache.clear()
+        val displayResult = interpret(display, tr("Topluluk ayarları"))
+        val filterResult = interpret(filters, tr("İçerik filtreleri"))
+        return if (!displayResult.ok) displayResult else filterResult
+    }
+
+    /** The community's picture, posted to the form the settings page renders. */
+    suspend fun uploadHoleLogo(
+        hole: String,
+        fileName: String,
+        contentType: String,
+        bytes: ByteArray,
+    ): ActionResult {
+        ensureAntiforgery()
+        val name = encodeSegment(hole)
+        val res = http.postFile(
+            path = "/h/$name/marsey_image",
+            fieldName = "marsey",
+            fileName = fileName,
+            contentType = contentType,
+            bytes = bytes,
+            referer = "/h/$name/settings?tab=general",
+        )
+        cache.clear()
+        return interpretPictureResponse(res)
+    }
+
+    /** The site's rules, which the app shows once before the rest of the app is used. */
+    suspend fun rules(force: Boolean = false): SiteRules =
+        HtmlParser.parseRules(page("/rules", force, ttlMs = 24 * 60 * 60 * 1000L))
 
     /**
      * The site's search, one tab at a time: `posts`, `comments` or `users`. The page is

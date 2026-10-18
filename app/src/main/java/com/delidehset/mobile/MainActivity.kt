@@ -38,6 +38,8 @@ import com.delidehset.mobile.ui.screens.AccountSettingsScreen
 import com.delidehset.mobile.ui.screens.AuthWebScreen
 import com.delidehset.mobile.ui.screens.BadgesScreen
 import com.delidehset.mobile.ui.screens.ChatScreen
+import com.delidehset.mobile.ui.screens.HoleSettingsScreen
+import com.delidehset.mobile.ui.screens.RulesScreen
 import com.delidehset.mobile.ui.screens.ContactScreen
 import com.delidehset.mobile.ui.screens.FeedScreen
 import com.delidehset.mobile.ui.screens.HolesScreen
@@ -62,6 +64,7 @@ import com.delidehset.mobile.vm.AccountSettingsViewModel
 import com.delidehset.mobile.vm.AppViewModel
 import com.delidehset.mobile.vm.AuthViewModel
 import com.delidehset.mobile.vm.FeedViewModel
+import com.delidehset.mobile.vm.HoleSettingsViewModel
 import com.delidehset.mobile.vm.HolesViewModel
 import com.delidehset.mobile.vm.PostViewModel
 import com.delidehset.mobile.vm.ProfileViewModel
@@ -118,6 +121,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DeliRoot() {
     val container = deliContainer()
+    val appContext = LocalContext.current.applicationContext
+    // Read once per composition: the setting is a preference, not something the screens
+    // switch while a transition is running.
+    val reduceMotion by remember { mutableStateOf(com.delidehset.mobile.data.HosetPrefs.reduceMotion(appContext)) }
     val appVm = deliViewModel { AppViewModel(it.repository, it.session, it.lang, it.theme) }
     val viewer by appVm.viewer.collectAsStateWithLifecycle()
     // The app's own language: the frame, the titles and every screen read it from here.
@@ -136,10 +143,10 @@ private fun DeliRoot() {
 
     // The app updates itself from its own GitHub releases; nothing here goes through a
     // store, so this is the only way a fix reaches an install that is already out there.
-    val appContext = LocalContext.current.applicationContext
     val updateVm = deliViewModel { UpdateViewModel(appContext) }
     val updateState by updateVm.state.collectAsStateWithLifecycle()
     val updateVisible by updateVm.visible.collectAsStateWithLifecycle()
+    val updateHistory by updateVm.history.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { updateVm.maybeCheckOnLaunch() }
 
     val snackbar = remember { SnackbarHostState() }
@@ -245,28 +252,28 @@ private fun DeliRoot() {
             // small travel keep a fast app feeling fast.
             enterTransition = {
                 androidx.compose.animation.slideInHorizontally(
-                    animationSpec = androidx.compose.animation.core.tween(220),
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 220),
                     initialOffsetX = { it / 6 },
                 ) + androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(180)
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 180)
                 )
             },
             exitTransition = {
                 androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(140)
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 140)
                 )
             },
             popEnterTransition = {
                 androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(180)
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 180)
                 )
             },
             popExitTransition = {
                 androidx.compose.animation.slideOutHorizontally(
-                    animationSpec = androidx.compose.animation.core.tween(200),
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 200),
                     targetOffsetX = { it / 8 },
                 ) + androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(160)
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 160)
                 )
             },
         ) {
@@ -319,7 +326,26 @@ private fun DeliRoot() {
                     onOpenUser = { nav.navigate(Routes.user(it)) },
                     onMessage = { appVm.showMessage(it) },
                     onOpenSubmit = { hole -> nav.navigate(Routes.submit(hole)) },
+                    onOpenHoleSettings = { name -> nav.navigate(Routes.holeSettings(name)) },
                 )
+            }
+
+            composable(
+                route = Routes.HOLE_SETTINGS_PATTERN,
+                arguments = listOf(navArgument("hole") { type = NavType.StringType }),
+            ) { entry ->
+                val hole = entry.arguments?.getString("hole").orEmpty()
+                val vm = deliViewModel("hole-settings-$hole") { HoleSettingsViewModel(it.repository) }
+                HoleSettingsScreen(
+                    vm = vm,
+                    hole = hole,
+                    contentPadding = noPad,
+                    onMessage = { appVm.showMessage(it) },
+                )
+            }
+
+            composable(Routes.RULES) {
+                RulesScreen(contentPadding = noPad)
             }
 
             composable(Routes.HOLES) {
@@ -631,6 +657,9 @@ private fun DeliRoot() {
                     contentPadding = noPad,
                     onOpenThemeStore = { nav.navigate(Routes.THEMES) },
                     onCheckUpdates = { updateVm.checkNow() },
+                    history = updateHistory,
+                    onLoadHistory = { updateVm.loadHistory() },
+                    onInstallVersion = { updateVm.installVersion(it) },
                 )
             }
         }

@@ -123,6 +123,45 @@ data class Hole(
 data class HoleState(
     val joined: Boolean? = null,
     val blocked: Boolean? = null,
+    /**
+     * Whether this account may open the community's settings. The site renders the link
+     * only for the people who run it, so its absence is the permission check.
+     */
+    val canManage: Boolean = false,
+)
+
+/**
+ * A community's settings, as its own `/h/{name}/settings` page presents them.
+ *
+ * Only the three the app can edit: the display name, the picture and the content
+ * filters. Everything else on that page stays where the site put it.
+ */
+data class HoleSettings(
+    val hole: String,
+    val displayName: String = "",
+    val blockedIps: String = "",
+    val blockedWords: String = "",
+    val logoUrl: String? = null,
+    /** False on a page the account is allowed to read but not to change. */
+    val canEdit: Boolean = false,
+)
+
+/**
+ * What a community page says when it will not show itself.
+ *
+ * An invite-only community answers `/h/{name}` with 403 and a small page: a lock, the
+ * community's own note and a button that asks to join. That page is not an error — it is
+ * the community, as far as a non-member is allowed to see it.
+ */
+data class HoleAccess(
+    val locked: Boolean = false,
+    val reason: String? = null,
+    val canRequest: Boolean = false,
+)
+
+/** The site's rules page, split into the lines it is written in. */
+data class SiteRules(
+    val blocks: List<String> = emptyList(),
 )
 
 data class SiteUser(

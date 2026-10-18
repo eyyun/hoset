@@ -15,7 +15,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -67,6 +67,15 @@ object Routes {
 
     /** The site's own notification list, drawn natively. */
     const val NOTIFICATIONS = "notifications"
+
+    /** The site's rules, readable again after the first-launch gate. */
+    const val RULES = "rules"
+
+    /** A community's settings, for the accounts the community lets in there. */
+    const val HOLE_SETTINGS = "hole-settings"
+    const val HOLE_SETTINGS_PATTERN = "hole-settings?hole={hole}"
+
+    fun holeSettings(hole: String) = "$HOLE_SETTINGS?hole=$hole"
 
     fun feed(hole: String? = null) = if (hole.isNullOrBlank()) FEED else "$FEED?hole=$hole"
 
@@ -133,13 +142,9 @@ val drawerSections: List<DrawerSection> = listOf(
             DrawerItem("Rozetler", Routes.page("badges"), Icons.Filled.Hexagon),
             DrawerItem("Leaderboard", Routes.page("leaderboard"), Icons.Filled.EmojiEvents, signedInOnly = true),
             DrawerItem("İstatistikler", Routes.page("stats"), Icons.Filled.QueryStats, signedInOnly = true),
-        ),
-    ),
-    DrawerSection(
-        title = "Keşfet",
-        items = listOf(
-            DrawerItem("Rastgele gönderi", Routes.RANDOM + "?kind=post", Icons.Filled.Shuffle),
-            DrawerItem("Rastgele kullanıcı", Routes.RANDOM + "?kind=user", Icons.Filled.Casino),
+            // The rules belong with the community things, not buried in About: a person
+            // should be able to find them without opening settings first.
+            DrawerItem("Kurallar", Routes.RULES, Icons.Filled.Shield),
         ),
     ),
     DrawerSection(

@@ -120,8 +120,6 @@ fun ChatScreen(
     var voiceOpen by remember { mutableStateOf(false) }
     var micDenied by remember { mutableStateOf(false) }
 
-    val transport = remember { session.start(viewerName) }
-
     // Tell the room which account this is, twice: the frame is usually still loading when
     // this screen opens, and the call reports its participants by name.
     LaunchedEffect(viewerName) {
@@ -253,15 +251,20 @@ fun ChatScreen(
             .fillMaxSize()
             .background(DeliColors.Background),
     ) {
-        // The transport itself: never visible, never touched by the user.
+        // The transport itself: never visible, never touched by the user. The screen owns
+        // an empty host and the session moves its WebView into it — so a room that was
+        // closed in the background comes back as a working room instead of a blank one,
+        // and the same view is never handed to two parents.
         Box(Modifier.height(1.dp).fillMaxWidth()) {
-            // The WebView outlives this screen, so it is detached when the composition
-            // goes away: a view cannot be added to a second parent, and this one is handed
-            // to a fresh AndroidView every time the screen is opened again.
             AndroidView(
                 modifier = Modifier.size(1.dp),
-                factory = { transport },
-                onRelease = { view -> (view.parent as? android.view.ViewGroup)?.removeView(view) },
+                factory = { hostContext ->
+                    android.widget.FrameLayout(hostContext).also { host ->
+                        session.attach(host, viewerName)
+                    }
+                },
+                update = { host -> session.attach(host, viewerName) },
+                onRelease = { host -> host.removeAllViews() },
             )
         }
 
@@ -694,7 +697,7 @@ private fun VoicePanel(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            user.name.firstOrNull()?.uppercase() ?: "?",
+                            com.delidehset.mobile.ui.components.initialOf(user.name) ?: "?",
                             color = nameColor(user.name),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,

@@ -127,31 +127,10 @@ fun HolesScreen(
  *
  * The list used to be names only, which made twenty communities read as twenty identical
  * rows; post cards have shown these logos all along. The fallback keeps its colour stable
- * per name, the same way an account's initial does.
+ * per name, the same way an account's initial does. The drawing itself lives in
+ * [HoleLogo], which the community page and its settings use too.
  */
 @Composable
 private fun HoleMark(name: String, logo: String?) {
-    val shaped = Modifier.size(34.dp).clip(CircleShape)
-    if (!logo.isNullOrBlank()) {
-        AsyncImage(
-            // The table may carry a root-relative path or a full URL; only the former is
-            // the site's own host.
-            model = if (logo.startsWith("http")) logo else DeliHttp.BASE_URL + logo,
-            contentDescription = null,
-            modifier = shaped,
-            contentScale = ContentScale.Crop,
-        )
-    } else {
-        Box(
-            modifier = shaped.background(nameColor(name).copy(alpha = 0.22f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                name.take(1).uppercase(),
-                color = nameColor(name),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
+    HoleLogo(url = logo, name = name, size = 34.dp)
 }

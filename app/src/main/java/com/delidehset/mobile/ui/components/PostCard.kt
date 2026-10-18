@@ -62,12 +62,16 @@ fun PostCard(
     DeliCard(modifier = modifier, onClick = onOpen) {
         // ---- hole header ----
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val logo = DeliHttp.BASE_URL + (post.holeLogo ?: "/assets/images/logo.webp")
-            AsyncImage(
-                model = logo,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp).clip(CircleShape),
-                contentScale = ContentScale.Crop,
+            // The feed's `hole_logo` is the site's *generic* community picture today —
+            // the same file for every hole — so drawing it made every community look
+            // identical. A real uploaded logo is used when there is one; otherwise the
+            // community gets the initial its own list already gives it.
+            val given = post.holeLogo?.takeIf { it.isNotBlank() }
+            val generic = given == null || given.contains("hole.webp") || given.contains("images/logo")
+            com.delidehset.mobile.ui.screens.HoleLogo(
+                url = given.takeUnless { generic },
+                name = post.hole ?: post.holeLabel ?: "general",
+                size = 22.dp,
             )
             Spacer(Modifier.width(8.dp))
             Text(

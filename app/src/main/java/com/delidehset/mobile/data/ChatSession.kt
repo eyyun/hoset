@@ -66,7 +66,8 @@ class ChatSession(
         transport?.let { existing ->
             if (this.viewerName == viewerName) return existing
         }
-        // A different account: the old socket belongs to the old session.
+        // A different account, or a transport that was closed: the old socket belongs to
+        // the old session, and a destroyed WebView cannot be shown again.
         close()
 
         val created = ChatBridge(
@@ -87,6 +88,33 @@ class ChatSession(
         transport = view
         this.viewerName = viewerName
         return view
+    }
+
+    /**
+     * Hands the room's WebView to a host view, without ever reusing a parent.
+     *
+     * The screen used to build the WebView once and keep it in `remember`, which broke in
+     * two ways that both looked like "the room is dead": a view cannot be added to a
+     * second parent, and a WebView that the session had already closed was shown again
+     * as a blank rectangle. The host is the screen's own frame; whatever the session has
+     * is moved into it, rebuilt if necessary, and shown.
+     */
+    fun attach(host: android.view.ViewGroup, viewerName: String?): WebView {
+        val web = start(viewerName)
+        if (web.parent !== host) {
+            (web.parent as? android.view.ViewGroup)?.removeView(web)
+            host.removeAllViews()
+            host.addView(
+                web,
+                android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            web.onResume()
+            web.resumeTimers()
+        }
+        return web
     }
 
     /** Says who is here, twice: the frame is usually still loading the first time. */

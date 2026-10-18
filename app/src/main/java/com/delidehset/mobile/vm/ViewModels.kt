@@ -11,6 +11,8 @@ import com.delidehset.mobile.data.DiscoveredForm
 import com.delidehset.mobile.data.FeedPost
 import com.delidehset.mobile.data.FeedSort
 import com.delidehset.mobile.data.Hole
+import com.delidehset.mobile.data.HoleAccess
+import com.delidehset.mobile.data.HoleSettings
 import com.delidehset.mobile.data.LangStore
 import com.delidehset.mobile.data.LoginResult
 import com.delidehset.mobile.data.NotificationPage
@@ -191,6 +193,8 @@ data class FeedUiState(
     val error: String? = null,
     val nextCursor: String? = null,
     val endReached: Boolean = false,
+    /** Set when the community is private: its lock screen instead of a feed. */
+    val lock: HoleAccess? = null,
 )
 
 class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
@@ -208,6 +212,16 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _holeBlocked = MutableStateFlow<Boolean?>(null)
     val holeBlocked: StateFlow<Boolean?> = _holeBlocked.asStateFlow()
 
+    /**
+     * Whether this account may open the community's settings.
+     *
+     * Taken from the hole page's own settings link, which the site renders only for the
+     * people who run it. A community somebody merely posts in gets no gear icon — the
+     * permission is the site's, not the app's opinion.
+     */
+    private val _holeCanManage = MutableStateFlow(false)
+    val holeCanManage: StateFlow<Boolean> = _holeCanManage.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -218,10 +232,40 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
         started = true
         _holeFollowing.value = null
         _holeBlocked.value = null
+        _holeCanManage.value = false
         _state.value = FeedUiState(sort = sort, hole = hole, effortOnly = effortOnly)
-        // Cache first: opening a feed you already visited renders immediately.
-        load(reset = true, force = false)
-        if (hole != null) loadHoleState(hole)
+        if (hole == null) {
+            // Cache first: opening a feed you already visited renders immediately.
+            load(reset = true, force = false)
+            return
+        }
+        // A private community answers its page with a lock screen; asking the feed for
+        // posts first would show an error for a community that is simply closed.
+        viewModelScope.launch(Dispatchers.IO) {
+            val access = runCatching { repo.holeAccess(hole) }.getOrNull()
+            if (access?.locked == true) {
+                _state.update { it.copy(lock = access, loading = false) }
+            } else {
+                load(reset = true, force = false)
+            }
+            loadHoleState(hole)
+        }
+    }
+
+    /** Sends the request to join a private community, with the reason its mods read. */
+    fun requestJoin(hole: String, reason: String, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.requestJoin(hole, reason) }
+                .onSuccess { result ->
+                    _message.value = result.message
+                        ?: tr(if (result.ok) "Katılma isteğin gönderildi. Onay bekleniyor." else "İstek gönderilemedi.")
+                    onDone(result.ok)
+                }
+                .onFailure {
+                    _message.value = DeliErrors.explain(it)
+                    onDone(false)
+                }
+        }
     }
 
     /** Reads the community's own page so its join/leave state is right on arrival. */
@@ -231,6 +275,7 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
                 .onSuccess { state ->
                     state.joined?.let { _holeFollowing.value = it }
                     state.blocked?.let { _holeBlocked.value = it }
+                    _holeCanManage.value = state.canManage
                 }
         }
     }
@@ -470,21 +515,30 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
     fun startReply(comment: CommentNode?) = _state.update { it.copy(replyTo = comment) }
     fun cancelReply() = _state.update { it.copy(replyTo = null) }
 
-    fun sendComment(body: String, authorName: String? = null) {
+    /**
+     * Writes a comment.
+     *
+     * [topLevel] is what the box above the thread sends: whether or not a reply was
+     * started somewhere below, the box at the top is a plain comment box, and its line
+     * belongs to the post rather than to whichever comment was tapped last. Replies are
+     * written in the small box under the comment they answer, which passes false.
+     */
+    fun sendComment(body: String, authorName: String? = null, topLevel: Boolean = false) {
         val s = _state.value
         val post = s.post ?: return
         if (body.isBlank()) return
         _state.update { it.copy(sending = true, message = null) }
         viewModelScope.launch(Dispatchers.IO) {
+            val parentId = if (topLevel) null else s.replyTo?.id
             val res = runCatching {
-                repo.comment(s.commentForm, post.id, body, s.replyTo?.id, post.hole)
+                repo.comment(s.commentForm, post.id, body, parentId, post.hole)
             }.getOrNull()
-            _state.update { it.copy(sending = false, replyTo = null) }
+            _state.update { it.copy(sending = false, replyTo = if (topLevel) it.replyTo else null) }
             if (res?.ok == true) {
                 val cid = res.commentId()
                 // A reply is drawn where it belongs — under the comment it answers — instead
                 // of at the end of the thread, where it read as one more new comment.
-                val parent = s.replyTo
+                val parent = if (topLevel) null else s.replyTo
                 val local = CommentNode(
                     id = cid ?: "local-${System.currentTimeMillis()}",
                     parentId = parent?.id,
@@ -600,6 +654,86 @@ class HolesViewModel(private val repo: DeliRepository) : ViewModel() {
                 .onFailure { _state.value = ListUiState(loading = false, error = DeliErrors.explain(it)) }
         }
     }
+}
+
+data class HoleSettingsUiState(
+    val settings: HoleSettings? = null,
+    val loading: Boolean = false,
+    val saving: Boolean = false,
+    val uploading: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+/**
+ * A community's settings, as the community's own page presents them.
+ *
+ * Only the three things the app can actually write are here: the display name, the
+ * picture and the content filters. The page is read first, so an account that is not
+ * allowed to change the community sees why instead of a form that would silently fail.
+ */
+class HoleSettingsViewModel(private val repo: DeliRepository) : ViewModel() {
+    private val _state = MutableStateFlow(HoleSettingsUiState())
+    val state: StateFlow<HoleSettingsUiState> = _state.asStateFlow()
+    private var loadedHole: String? = null
+
+    fun load(hole: String, force: Boolean = false) {
+        if (hole.isBlank()) return
+        if (loadedHole == hole && !force) return
+        loadedHole = hole
+        _state.value = _state.value.copy(loading = true, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.holeSettings(hole, force) }
+                .onSuccess { settings ->
+                    _state.value = HoleSettingsUiState(
+                        settings = settings,
+                        loading = false,
+                        error = if (settings == null) tr("Topluluk ayarları okunamadı.") else null,
+                    )
+                }
+                .onFailure { _state.value = HoleSettingsUiState(loading = false, error = DeliErrors.explain(it)) }
+        }
+    }
+
+    fun save(hole: String, displayName: String, blockedIps: String, blockedWords: String) {
+        if (_state.value.saving) return
+        _state.value = _state.value.copy(saving = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.saveHoleSettings(hole, displayName, blockedIps, blockedWords) }
+                .onSuccess { result ->
+                    _state.value = _state.value.copy(
+                        saving = false,
+                        message = if (result.ok) tr("Topluluk ayarları kaydedildi.") else null,
+                        error = if (result.ok) null else result.message ?: tr("Ayarlar kaydedilemedi."),
+                    )
+                    if (result.ok) load(hole, force = true)
+                }
+                .onFailure {
+                    _state.value = _state.value.copy(saving = false, error = DeliErrors.explain(it))
+                }
+        }
+    }
+
+    fun uploadLogo(hole: String, fileName: String, contentType: String, bytes: ByteArray) {
+        if (_state.value.uploading) return
+        _state.value = _state.value.copy(uploading = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.uploadHoleLogo(hole, fileName, contentType, bytes) }
+                .onSuccess { result ->
+                    _state.value = _state.value.copy(
+                        uploading = false,
+                        message = if (result.ok) tr("Topluluk görseli güncellendi.") else null,
+                        error = if (result.ok) null else result.message ?: tr("Görsel yüklenemedi."),
+                    )
+                    if (result.ok) load(hole, force = true)
+                }
+                .onFailure {
+                    _state.value = _state.value.copy(uploading = false, error = DeliErrors.explain(it))
+                }
+        }
+    }
+
+    fun consumeMessage() { _state.value = _state.value.copy(message = null) }
 }
 
 class UsersViewModel(private val repo: DeliRepository) : ViewModel() {

@@ -23,10 +23,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
@@ -34,6 +39,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,13 +78,24 @@ fun FeedScreen(
     onMessage: (String) -> Unit = {},
     /** A community's own "post in this hole" button. */
     onOpenSubmit: (hole: String) -> Unit = {},
+    /** Opened only for the people the community itself lets in. */
+    onOpenHoleSettings: (hole: String) -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val holeFollowing by vm.holeFollowing.collectAsStateWithLifecycle()
     val holeBlocked by vm.holeBlocked.collectAsStateWithLifecycle()
+    val holeCanManage by vm.holeCanManage.collectAsStateWithLifecycle()
     val vmMessage by vm.message.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    val reduceMotion = remember { com.delidehset.mobile.data.HosetPrefs.reduceMotion(context) }
+
+    // A private community: the lock screen is the whole feed, and the dialog is the only
+    // way in.
+    val lock = state.lock
+    var showJoin by remember { mutableStateOf(false) }
+    var joinReason by remember { mutableStateOf("") }
+    var requested by remember(hole) { mutableStateOf(false) }
 
     LaunchedEffect(vmMessage) {
         vmMessage?.let { onMessage(it); vm.consumeMessage() }
@@ -115,20 +134,9 @@ fun FeedScreen(
                     .padding(start = 12.dp, end = 12.dp, top = 10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(DeliColors.PrimaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = hole.take(1).uppercase(),
-                            color = DeliColors.Primary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
+                    // The community's own picture when the site has one, its initial
+                    // otherwise — the same drawing the community list uses.
+                    HoleLogo(url = null, name = hole, size = 34.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -169,6 +177,20 @@ fun FeedScreen(
                             .size(22.dp)
                             .clickable { vm.toggleHoleBlock(hole) },
                     )
+                    // Only the community's own page says who may change it; when it says
+                    // this account can, the gear appears. Anybody else simply never sees
+                    // a control the site would refuse.
+                    if (holeCanManage) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = t("Topluluk ayarları"),
+                            tint = DeliColors.OnSurfaceVariant,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable { onOpenHoleSettings(hole) },
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -179,6 +201,15 @@ fun FeedScreen(
             }
         }
 
+        if (lock?.locked == true) {
+            LockedHole(
+                hole = hole.orEmpty(),
+                reason = lock.reason,
+                canRequest = lock.canRequest,
+                requested = requested,
+                onRequest = { showJoin = true },
+            )
+        } else {
         // ---- sort bar, same four buttons as the site ----
         Row(
             modifier = Modifier
@@ -238,7 +269,7 @@ fun FeedScreen(
                 ) {
                     items(state.posts, key = { it.id }, contentType = { "post" }) { post: FeedPost ->
                         PostCard(
-                            modifier = Modifier.animateItem(),
+                            modifier = if (reduceMotion) Modifier else Modifier.animateItem(),
                             post = post,
                             canVote = canVote,
                             onOpen = { onOpenPost(post.permalink) },
@@ -260,5 +291,110 @@ fun FeedScreen(
                 }
             }
         }
+        }
     }
+
+    if (showJoin) {
+        AlertDialog(
+            onDismissRequest = { showJoin = false },
+            title = { Text(t("Katılma isteği gönder"), color = DeliColors.OnBackground) },
+            text = {
+                Column {
+                    MutedBox(t("Neden katılmak istediğini kısaca yaz."))
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = joinReason,
+                        onValueChange = { if (it.length <= 500) joinReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6,
+                        placeholder = { Text("İsteğe bağlı", color = DeliColors.OnSurfaceVariant) },
+                        shape = DeliShapes.control,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showJoin = false
+                        vm.requestJoin(hole.orEmpty(), joinReason) { ok ->
+                            if (ok) {
+                                requested = true
+                                joinReason = ""
+                            }
+                        }
+                    },
+                ) { Text(t("İsteği gönder"), color = DeliColors.Primary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJoin = false }) {
+                    Text(t("İptal"), color = DeliColors.OnSurfaceVariant)
+                }
+            },
+            containerColor = DeliColors.Surface,
+        )
+    }
+}
+
+/**
+ * What a private community shows instead of its posts.
+ *
+ * The lock and the note are the community's own; the app only adds the way to ask for
+ * entry, which is the one thing the website offers a non-member here too.
+ */
+@Composable
+private fun LockedHole(
+    hole: String,
+    reason: String?,
+    canRequest: Boolean,
+    requested: Boolean,
+    onRequest: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            tint = DeliColors.OnSurfaceVariant,
+            modifier = Modifier.size(38.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "/h/$hole " + t("gizli"),
+            color = DeliColors.OnBackground,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            reason?.takeIf { it.isNotBlank() } ?: t("Bu topluluk yalnızca üyelerine açık."),
+            color = DeliColors.OnSurfaceVariant,
+            fontSize = 14.sp,
+        )
+        if (canRequest) {
+            Spacer(Modifier.height(18.dp))
+            if (requested) {
+                Text(
+                    t("Katılma isteğin gönderildi. Onay bekleniyor."),
+                    color = DeliColors.Success,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            } else {
+                DeliButtonPrimary(
+                    text = t("Katılma isteği gönder"),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { onRequest() }
+            }
+        }
+    }
+}
+
+/** A small muted line inside a dialog, where a full MutedText would be too quiet. */
+@Composable
+private fun MutedBox(text: String) {
+    Text(text, color = DeliColors.OnSurfaceVariant, fontSize = 13.sp)
 }

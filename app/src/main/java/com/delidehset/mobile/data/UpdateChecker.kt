@@ -19,6 +19,8 @@ data class UpdateInfo(
     /** The `sha256:…` digest GitHub publishes for the asset, without its prefix. */
     val sha256: String?,
     val pageUrl: String,
+    /** A pre-release: only the experimental channel is offered these. */
+    val prerelease: Boolean = false,
 )
 
 /**
@@ -35,6 +37,7 @@ object UpdateChecker {
     const val REPO = "hoset"
 
     private const val LATEST = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+    private const val ALL = "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=30"
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -45,8 +48,57 @@ object UpdateChecker {
             .build()
     }
 
-    /** The latest published release, or null when there is none to be had. */
-    suspend fun latest(versionName: String): UpdateInfo? = withContext(Dispatchers.IO) {
+    /**
+     * The newest release this install should be offered.
+     *
+     * `/releases/latest` is defined by GitHub as the newest release that is neither a
+     * draft nor a pre-release, which is exactly the stable channel. The experimental
+     * channel reads the full list and takes the newest of everything, drafts excluded.
+     */
+    suspend fun latest(versionName: String, experimental: Boolean = false): UpdateInfo? {
+        if (experimental) return history(versionName).firstOrNull()
+        return latestStable(versionName)
+    }
+
+    /** Every published release with an APK, newest first — the downgrade list too. */
+    suspend fun history(versionName: String): List<UpdateInfo> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(ALL)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", userAgent(versionName))
+            .build()
+        runCatching {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyList()
+                val body = response.body?.string() ?: return@use emptyList()
+                val releases = json.decodeFromString<List<Release>>(body)
+                releases.asSequence()
+                    .filter { !it.draft }
+                    .mapNotNull { it.toInfo() }
+                    .sortedWith { a, b -> compareVersions(b.version, a.version) }
+                    .toList()
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Whether [a] is a later version than [b], number by number. */
+    fun compareVersions(a: String, b: String): Int {
+        val left = numbersOf(a)
+        val right = numbersOf(b)
+        for (index in 0 until maxOf(left.size, right.size)) {
+            val next = left.getOrElse(index) { 0 }
+            val here = right.getOrElse(index) { 0 }
+            if (next != here) return next.compareTo(here)
+        }
+        // Same numbers: a `-beta` suffix is earlier than the plain release.
+        return when {
+            a.contains('-') && !b.contains('-') -> -1
+            !a.contains('-') && b.contains('-') -> 1
+            else -> 0
+        }
+    }
+
+    private suspend fun latestStable(versionName: String): UpdateInfo? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(LATEST)
             .header("Accept", "application/vnd.github+json")
@@ -57,15 +109,7 @@ object UpdateChecker {
                 if (!response.isSuccessful) return@use null
                 val body = response.body?.string() ?: return@use null
                 val release = json.decodeFromString<Release>(body)
-                val asset = release.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
-                    ?: return@use null
-                UpdateInfo(
-                    version = release.tag.removePrefix("v").trim(),
-                    apkUrl = asset.downloadUrl,
-                    sizeBytes = asset.size,
-                    sha256 = asset.digest?.substringAfter("sha256:", "")?.takeIf { it.isNotBlank() },
-                    pageUrl = release.pageUrl,
-                )
+                release.toInfo()
             }
         }.getOrNull()
     }
@@ -153,7 +197,22 @@ object UpdateChecker {
         @SerialName("body") val notes: String = "",
         @SerialName("html_url") val pageUrl: String = "",
         val assets: List<Asset> = emptyList(),
-    )
+        val prerelease: Boolean = false,
+        val draft: Boolean = false,
+    ) {
+        fun toInfo(): UpdateInfo? {
+            val asset = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) } ?: return null
+            val version = tag.removePrefix("v").trim().ifBlank { return null }
+            return UpdateInfo(
+                version = version,
+                apkUrl = asset.downloadUrl,
+                sizeBytes = asset.size,
+                sha256 = asset.digest?.substringAfter("sha256:", "")?.takeIf { it.isNotBlank() },
+                pageUrl = pageUrl,
+                prerelease = prerelease,
+            )
+        }
+    }
 
     @Serializable
     private data class Asset(

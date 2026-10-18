@@ -34,6 +34,10 @@ object HosetPrefs {
     private const val KEY_COMPACT_FEED = "compact_feed"
     private const val KEY_AUTO_UPDATE = "auto_update"
     private const val KEY_LAST_VERSION = "last_version"
+    private const val KEY_RULES_ACCEPTED = "rules_accepted"
+    private const val KEY_RULES_TEXT = "rules_text"
+    private const val KEY_EXPERIMENTAL = "experimental"
+    private const val KEY_REDUCE_MOTION = "reduce_motion"
 
     val appTitleState = mutableStateOf("Hoset")
     val fontScaleState = mutableFloatStateOf(1.0f)
@@ -104,6 +108,49 @@ object HosetPrefs {
 
     fun setLastVersion(context: Context, version: String) {
         prefs(context).edit().putString(KEY_LAST_VERSION, version).apply()
+    }
+
+    /**
+     * Whether the site's rules have been read on this install.
+     *
+     * A plain flag, not a version: the rules are shown once and then never again, which is
+     * what was asked for. The text itself is kept too, so the screen still opens them
+     * when the site cannot be reached.
+     */
+    fun rulesAccepted(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_RULES_ACCEPTED, false)
+
+    fun setRulesAccepted(context: Context, accepted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_RULES_ACCEPTED, accepted).apply()
+    }
+
+    fun rulesText(context: Context): String? =
+        prefs(context).getString(KEY_RULES_TEXT, null)?.takeIf { it.isNotBlank() }
+
+    fun setRulesText(context: Context, text: String) {
+        prefs(context).edit().putString(KEY_RULES_TEXT, text).apply()
+    }
+
+    /**
+     * Whether this install follows the experimental channel.
+     *
+     * Off by default. An install with it on is offered pre-releases and the builds that
+     * carry unfinished features; an install with it off only ever sees a stable release,
+     * which is what `releases/latest` returns.
+     */
+    fun experimental(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_EXPERIMENTAL, false)
+
+    fun setExperimental(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_EXPERIMENTAL, enabled).apply()
+    }
+
+    /** Turns the app's animations off, for anyone who would rather have less movement. */
+    fun reduceMotion(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_REDUCE_MOTION, false)
+
+    fun setReduceMotion(context: Context, reduce: Boolean) {
+        prefs(context).edit().putBoolean(KEY_REDUCE_MOTION, reduce).apply()
     }
 
     fun autoUpdate(context: Context): Boolean =

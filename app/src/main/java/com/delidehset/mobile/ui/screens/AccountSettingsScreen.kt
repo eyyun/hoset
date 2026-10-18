@@ -448,7 +448,7 @@ private fun DeliDropdown(value: String, options: List<Pair<String, String>>, onS
  * not have to be loaded at full size), scaled to a sane edge length and re-encoded as JPEG,
  * which also drops the EXIF orientation problem along with most of the bytes.
  */
-private suspend fun readPickedFile(context: Context, uri: Uri): Triple<String, String, ByteArray>? =
+internal suspend fun readPickedFile(context: Context, uri: Uri): Triple<String, String, ByteArray>? =
     withContext(Dispatchers.IO) {
         runCatching {
             val rawName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->

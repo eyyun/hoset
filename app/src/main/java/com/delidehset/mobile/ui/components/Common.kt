@@ -163,6 +163,19 @@ private fun isAnonymous(name: String?): Boolean =
     name != null && name.trim().equals("Anonymous", ignoreCase = true)
 
 /**
+ * The letter a nameless account is drawn with.
+ *
+ * The first *code point*, not the first UTF-16 unit: a name that starts with an emoji —
+ * and people do use them — was cut in half by `take(1)`, which left a replacement glyph
+ * where a letter should be. Null for a blank name, so callers can fall back to an icon.
+ */
+fun initialOf(name: String?): String? {
+    val trimmed = name?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val first = Character.codePointAt(trimmed, 0)
+    return String(Character.toChars(first)).uppercase()
+}
+
+/**
  * What an anonymous author gets instead of a letter.
  *
  * There is nobody behind the name to give a colour to, and a lone "A" on a tinted square
@@ -226,14 +239,26 @@ private fun InitialAvatar(
             )
             .border(1.dp, (tint ?: DeliColors.Border).copy(alpha = if (tint != null) 0.6f else 1f), shape),
         contentAlignment = Alignment.Center,
-        propagateMinConstraints = true,
     ) {
-        if (label != null) {
+        val initial = initialOf(label)
+        if (initial != null) {
+            // `propagateMinConstraints` used to hand the letter a box the size of the
+            // whole avatar and start it at that box's top-left corner — which is why the
+            // initial sat high and left instead of in the middle. The font padding is
+            // gone too: with a glyph as tall as the line, it was what pushed the letter
+            // down by a few more pixels.
+            val letterSize = (size.value * 0.42f).sp
             Text(
-                text = label.first().uppercase(),
+                text = initial,
                 color = DeliColors.OnBackground,
-                fontSize = (size.value * 0.44f).sp,
+                fontSize = letterSize,
+                lineHeight = letterSize,
                 fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                style = androidx.compose.ui.text.TextStyle(
+                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
+                ),
             )
         } else {
             Icon(

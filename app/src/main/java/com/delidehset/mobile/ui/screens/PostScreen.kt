@@ -257,30 +257,18 @@ fun PostScreen(
                 }
 
                 // ---- composer ----
+                // This box is the post's own comment box, always. A reply started under a
+                // comment gets its own small box there, so the line written here never
+                // silently becomes an answer to whoever was tapped last.
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        if (state.replyTo != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                MutedText(tf("@{0} kişisine yanıt yazıyorsun", state.replyTo?.authorName ?: "?"))
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    "İptal",
-                                    color = DeliColors.Blue,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.clickable { vm.cancelReply() },
-                                )
-                            }
-                        }
                         OutlinedTextField(
                             value = replyText,
                             onValueChange = { replyText = it },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                             maxLines = 8,
-                            placeholder = { Text("Bir yanıt yaz…", color = DeliColors.OnSurfaceVariant) },
+                            placeholder = { Text("Bir yorum yaz…", color = DeliColors.OnSurfaceVariant) },
                             shape = DeliShapes.control,
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = DeliColors.Surface,
@@ -307,13 +295,13 @@ fun PostScreen(
                                         .clip(DeliShapes.small)
                                         .background(if (state.sending) DeliColors.SurfaceVariant else DeliColors.Primary)
                                         .clickable(enabled = !state.sending && replyText.isNotBlank()) {
-                                            vm.sendComment(replyText, viewerName)
+                                            vm.sendComment(replyText, viewerName, topLevel = true)
                                             replyText = ""
                                         }
                                         .padding(horizontal = 18.dp, vertical = 8.dp)
                                 ) {
                                     Text(
-                                        if (state.sending) "Gönderiliyor…" else "Yanıtla",
+                                        if (state.sending) "Gönderiliyor…" else "Yorum yap",
                                         color = androidx.compose.ui.graphics.Color.White,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -328,16 +316,42 @@ fun PostScreen(
                     item { EmptyBox("Henüz yorum yok. İlk yorumu sen yaz.") }
                 } else {
                     items(flatComments, key = { it.first.id }) { (comment, depth) ->
-                        CommentRow(
-                            comment = comment,
-                            depth = depth,
-                            highlighted = lit != null && comment.id == lit,
-                            viewerVote = state.commentVotes[comment.id] ?: comment.viewerVote,
-                            canVote = canVote,
-                            onVote = { vm.voteComment(comment, it) },
-                            onReply = { vm.startReply(comment) },
-                            onOpenUser = onOpenUser,
-                        )
+                        Column {
+                            CommentRow(
+                                comment = comment,
+                                depth = depth,
+                                highlighted = lit != null && comment.id == lit,
+                                viewerVote = state.commentVotes[comment.id] ?: comment.viewerVote,
+                                canVote = canVote,
+                                onVote = { vm.voteComment(comment, it) },
+                                onReply = {
+                                    replyText = ""
+                                    vm.startReply(comment)
+                                },
+                                onOpenUser = onOpenUser,
+                            )
+                            // The answer is written where it will appear: directly under
+                            // the comment it answers, not in the box at the top of the
+                            // thread where it could be mistaken for a new comment.
+                            if (state.replyTo?.id == comment.id) {
+                                InlineReplyBox(
+                                    name = comment.authorName ?: "?",
+                                    text = replyText,
+                                    onText = { replyText = it },
+                                    sending = state.sending,
+                                    signedIn = signedIn,
+                                    onCancel = {
+                                        replyText = ""
+                                        vm.cancelReply()
+                                    },
+                                    onSend = {
+                                        vm.sendComment(replyText, viewerName)
+                                        replyText = ""
+                                    },
+                                    onOpenLogin = onOpenLogin,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -477,6 +491,90 @@ private fun CommentRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable { onReply() },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The reply box that opens under the comment it answers.
+ *
+ * It is deliberately small and attached to the row: the box at the top of the thread
+ * stays a post-level comment box, and a reply can never be sent to the wrong parent
+ * because the parent is the row this box was opened on.
+ */
+@Composable
+private fun InlineReplyBox(
+    name: String,
+    text: String,
+    onText: (String) -> Unit,
+    sending: Boolean,
+    signedIn: Boolean,
+    onCancel: () -> Unit,
+    onSend: () -> Unit,
+    onOpenLogin: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 2.dp)
+            .clip(DeliShapes.control)
+            .background(DeliColors.Surface.copy(alpha = 0.65f))
+            .padding(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MutedText(tf("@{0} kişisine yanıt", name))
+            Spacer(Modifier.weight(1f))
+            Text(
+                "İptal",
+                color = DeliColors.Blue,
+                fontSize = 12.sp,
+                modifier = Modifier.clickable { onCancel() },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = text,
+            onValueChange = onText,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 6,
+            placeholder = { Text("Bir yanıt yaz…", color = DeliColors.OnSurfaceVariant) },
+            shape = DeliShapes.control,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = DeliColors.Background,
+                unfocusedContainerColor = DeliColors.Background,
+                focusedTextColor = DeliColors.OnBackground,
+                unfocusedTextColor = DeliColors.OnBackground,
+                cursorColor = DeliColors.Primary,
+                focusedIndicatorColor = DeliColors.Primary,
+                unfocusedIndicatorColor = DeliColors.Border,
+            ),
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+            if (!signedIn) {
+                Text(
+                    "Yorum yazmak için oturum aç",
+                    color = DeliColors.Warning,
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable { onOpenLogin() },
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(DeliShapes.small)
+                        .background(if (sending) DeliColors.SurfaceVariant else DeliColors.Primary)
+                        .clickable(enabled = !sending && text.isNotBlank()) { onSend() }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                ) {
+                    Text(
+                        if (sending) "Gönderiliyor…" else "Yanıtla",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }

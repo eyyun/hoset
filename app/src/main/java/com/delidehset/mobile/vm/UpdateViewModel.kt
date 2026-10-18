@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.delidehset.mobile.BuildConfig
 import com.delidehset.mobile.data.ApkInstaller
+import com.delidehset.mobile.data.HosetPrefs
 import com.delidehset.mobile.data.UpdateChecker
 import com.delidehset.mobile.data.UpdateDecision
 import com.delidehset.mobile.data.UpdateException
@@ -54,6 +55,33 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
      *  does not have to ask GitHub again. */
     private var pending: UpdateInfo? = null
 
+    /** The releases list, for the "install an older version" picker. Null until asked. */
+    private val _history = MutableStateFlow<List<UpdateInfo>?>(null)
+    val history: StateFlow<List<UpdateInfo>?> = _history.asStateFlow()
+    private var historyLoaded = false
+
+    fun loadHistory(force: Boolean = false) {
+        if (historyLoaded && !force) return
+        historyLoaded = true
+        viewModelScope.launch {
+            _history.value = runCatching { UpdateChecker.history(currentVersion) }.getOrDefault(emptyList())
+        }
+    }
+
+    /**
+     * Downloads and hands a specific release to Android — including an older one.
+     *
+     * Android refuses to install an APK with a lower versionCode over a higher one, so a
+     * downgrade usually means uninstalling first. That is said in the picker instead of
+     * being discovered from the installer's error.
+     */
+    fun installVersion(info: UpdateInfo) {
+        pending = info
+        prefs.edit().remove(KEY_SKIPPED).apply()
+        _visible.value = true
+        download()
+    }
+
     fun maybeCheckOnLaunch() {
         if (!com.delidehset.mobile.data.HosetPrefs.autoUpdate(appContext)) return
         // A failed check leaves the state on Failed; that must not stop the next launch from
@@ -74,7 +102,8 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
         if (current is UpdateState.Checking || current is UpdateState.Downloading) return
         viewModelScope.launch {
             _state.value = UpdateState.Checking
-            val info = runCatching { UpdateChecker.latest(currentVersion) }.getOrNull()
+            val experimental = HosetPrefs.experimental(appContext)
+            val info = runCatching { UpdateChecker.latest(currentVersion, experimental) }.getOrNull()
             val decision = decideUpdate(
                 latestVersion = info?.version,
                 currentVersion = currentVersion,

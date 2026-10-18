@@ -251,32 +251,140 @@ object HtmlParser {
     /*  Holes, users and the various tables                             */
     /* ---------------------------------------------------------------- */
 
+    /**
+     * The community table, read by its column headings.
+     *
+     * It used to be read by position with a guess for the counting column, and the guess
+     * landed on the row's own number: the app showed one post, then two, then three, for
+     * communities the site says have none — the first cell is an index and the
+     * first cell that parses as a number is that index. The headings say which column is
+     * which, and the site renders a different table for admins (with an Admin column at
+     * the end), so names are the only stable thing here.
+     */
     fun parseHoles(html: String): List<Hole> {
         val doc = document(html)
+        val headers = doc.select("table thead th").map { it.text().trim().lowercase() }
+        fun columnOf(vararg keys: String): Int =
+            headers.indexOfFirst { header -> keys.any { header.contains(it) } }
+
+        val nameColumn = columnOf("hole name", "topluluk", "hole")
+        val postsColumn = columnOf("posts", "gönderi")
+        val dateColumn = columnOf("created", "tarih")
+        val stealthColumn = columnOf("stealth", "gizli")
+        val publicColumn = columnOf("public", "herkese")
+
         return doc.select("table tbody tr").mapNotNull { row ->
             val cells = row.select("td")
             if (cells.size < 3) return@mapNotNull null
-            val link = cells[1].selectFirst("a[href^=/h/]") ?: row.selectFirst("a[href^=/h/]") ?: return@mapNotNull null
+            val link = cells.getOrNull(nameColumn)?.selectFirst("a[href^=/h/]")
+                ?: cells.firstNotNullOfOrNull { it.selectFirst("a[href^=/h/]") }
+                ?: return@mapNotNull null
             val texts = cells.map { it.text().trim() }
-            // The columns are not read by position any more. "0 posts" on every community
-            // was what reading the third cell blind produced: the counting column is not
-            // always third, and its number is written the way the site writes numbers
-            // ("1.2k"), which `toIntOrNull` turns into nothing at all.
-            val dateCell = texts.firstOrNull { DATE.containsMatchIn(it) }
-            val postsCell = texts.firstOrNull { it.contains("gönderi", true) || it.contains("post", true) }
-                ?: texts.filterNot { it == dateCell }.firstOrNull { countOf(it) != null }
+            val dateCell = texts.getOrNull(dateColumn)?.takeIf { DATE.containsMatchIn(it) }
+                ?: texts.firstOrNull { DATE.containsMatchIn(it) }
+
+            // The counting column by heading; without a table head, any cell that says
+            // "post"/"gönderi", and otherwise the first *linked* number after the index.
+            val postsCell = texts.getOrNull(postsColumn)
+                ?: texts.firstOrNull { it.contains("gönderi", true) || it.contains("post", true) }
+                ?: cells.drop(1).firstOrNull { cell ->
+                    cell.selectFirst("a[href^=/h/]") != null && countOf(cell.text()) != null
+                }?.text()
+
             Hole(
                 name = link.text().removePrefix("/h/").trim(),
                 href = link.attr("href"),
                 postCount = countOf(postsCell)?.toIntOrNull() ?: 0,
-                createdOn = dateCell ?: texts.getOrNull(3),
-                stealth = texts.getOrNull(4),
-                publicUse = texts.getOrNull(5),
-                // The list draws the community's picture beside its name; post cards have
-                // carried the same logo all along, the table just never read it.
+                createdOn = dateCell,
+                stealth = texts.getOrNull(stealthColumn),
+                publicUse = texts.getOrNull(publicColumn),
+                // A community picture, when the table carries one. The site's own table
+                // does not, which is why the list falls back to the name's initial.
                 logo = row.selectFirst("img[src]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() },
             )
         }
+    }
+
+    /**
+     * How many accounts a followers/following page holds.
+     *
+     * The profile header's counters are not refreshed when a follow happens — the site's
+     * own page keeps saying "follows 0 users" while the list behind the link is one page
+     * long — so the heading of the list, `cronus Follows (1)`, is the honest number.
+     * Returns null when the page is not one of those two.
+     */
+    fun parseRelationTotal(html: String): Int? {
+        val doc = document(html)
+        val heading = doc.selectFirst("#main-content-col h3, #main-content-col h2")?.text()?.trim()
+            ?: return null
+        if (!heading.contains("Follow", true) && !heading.contains("takip", true)) return null
+        val counted = Regex("\\((\\d[\\d.,]*)\\s*([kKmM])?\\)").find(heading) ?: return null
+        return countOf(counted.groupValues[1] + counted.groupValues[2])?.toIntOrNull()
+    }
+
+    /** A community's settings page: the three values the app can edit, and the permission. */
+    fun parseHoleSettings(html: String, hole: String): HoleSettings? {
+        val doc = document(html)
+        val main = doc.selectFirst("#main-content-col") ?: return null
+        if (!doc.title().contains("Settings", true) && !doc.title().contains("ayar", true)) return null
+
+        val display = main.selectFirst("input[name=display_name]")?.attr("value")?.trim().orEmpty()
+        // Textareas carry the saved value as their text, not as an attribute.
+        val ips = main.selectFirst("textarea[name=blocked_ip_ranges]")?.text().orEmpty()
+        val words = main.selectFirst("textarea[name=blocked_words]")?.text().orEmpty()
+        val logo = main.selectFirst("img[alt=Hole logo]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() }
+        val canEdit = main.selectFirst("form[onsubmit*=saveHoleDisplayName]") != null ||
+            main.selectFirst("form[onsubmit*=saveHoleContentFilters]") != null ||
+            main.selectFirst("form[action*=marsey_image]") != null
+        return HoleSettings(
+            hole = hole,
+            displayName = display,
+            blockedIps = ips.trim(),
+            blockedWords = words.trim(),
+            logoUrl = logo,
+            canEdit = canEdit,
+        )
+    }
+
+    /**
+     * The lock screen of an invite-only community.
+     *
+     * Returns null for any other page, so the caller can tell "this community is closed"
+     * from "this page failed". The note under the heading is written by the community's
+     * own moderators, which is why it is shown as it is rather than replaced with an
+     * app-level sentence.
+     */
+    fun parseHoleLock(html: String): HoleAccess? {
+        val doc = document(html)
+        val main = doc.selectFirst("#main-content-col") ?: return null
+        val heading = main.selectFirst("h1")?.text()?.trim() ?: return null
+        val locked = heading.contains("is private", true) || heading.contains("gizli", true) ||
+            doc.selectFirst("[onclick*=openJoinModal]") != null
+        if (!locked) return null
+        val reason = main.selectFirst("p.text-muted")?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val canRequest = doc.selectFirst("[onclick*=openJoinModal]") != null
+        return HoleAccess(locked = true, reason = reason, canRequest = canRequest)
+    }
+
+    /**
+     * The site's rules page, as the lines it is written in.
+     *
+     * `#rules` is the block the site's own sidebar renders: a heading, the rules as list
+     * items, then the "Bilgi" section. Each line is kept whole so the app can show them as
+     * paragraphs without guessing which part is a heading.
+     */
+    fun parseRules(html: String): SiteRules {
+        val doc = document(html)
+        val root = doc.selectFirst("#rules") ?: return SiteRules()
+        val blocks = mutableListOf<String>()
+        for (element in root.select("h1, h2, h3, h4, li, p")) {
+            val text = element.text().trim()
+            if (text.isBlank()) continue
+            if (text.none { it.isLetter() }) continue
+            if (blocks.lastOrNull() == text) continue
+            blocks += text
+        }
+        return SiteRules(blocks = blocks)
     }
 
     fun parseHoleHeader(html: String): Hole? {
@@ -416,7 +524,10 @@ object HtmlParser {
                 doc.selectFirst("#block-hole")?.hasClass("d-none") == true
             else -> null
         }
-        return HoleState(joined = joined, blocked = blocked)
+        // Only the people who run the community are shown this link; a member — or
+        // anybody else — must not be offered settings the site would refuse.
+        val canManage = doc.selectFirst("#main-content-col a[href^=/h/][href$=/settings]") != null
+        return HoleState(joined = joined, blocked = blocked, canManage = canManage)
     }
 
     fun parseSearch(html: String): List<SimpleRow> {
