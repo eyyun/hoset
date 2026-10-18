@@ -25,6 +25,8 @@ object DeliHtml {
     data class Rendered(
         val text: AnnotatedString,
         val images: List<String>,
+        /** Clip URLs in the body; played in the app instead of dropped. */
+        val videos: List<String> = emptyList(),
     )
 
     private const val MAX_IMAGES = 12
@@ -33,6 +35,12 @@ object DeliHtml {
         if (html.isNullOrBlank()) return Rendered(AnnotatedString(""), emptyList())
         val body = Jsoup.parseBodyFragment(html).body()
         val images = mutableListOf<String>()
+        val videos = mutableListOf<String>()
+        body.select("video[src]").forEach { videos += absolutize(it.attr("src")) }
+        body.select("video source[src], video[data-src]").forEach {
+            val src = it.attr("src").ifBlank { it.attr("data-src") }
+            if (src.isNotBlank()) videos += absolutize(src)
+        }
         val builder = AnnotatedString.Builder()
 
         fun emit(node: Node, listDepth: Int) {
@@ -48,6 +56,7 @@ object DeliHtml {
         return Rendered(
             text = trimTrailingBlankLines(buildAnnotatedString { append(builder.toAnnotatedString()) }),
             images = images.distinct().take(MAX_IMAGES),
+            videos = videos.distinct(),
         )
     }
 

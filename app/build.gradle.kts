@@ -116,6 +116,11 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
 
+    // Video posts: the site serves plain .webm/.mp4 files, so a player that streams a URL
+    // is all the app needs — no WebView, no browser hand-off.
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+
     debugImplementation(libs.androidx.ui.tooling)
 
     // JVM tests so the request/parse pipeline can be checked against the live site.

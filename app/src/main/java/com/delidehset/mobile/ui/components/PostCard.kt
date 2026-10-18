@@ -102,8 +102,11 @@ fun PostCard(
             overflow = TextOverflow.Ellipsis,
         )
 
+        val compact = com.delidehset.mobile.data.HosetPrefs.compactFeedState.value
+        val hideNsfw = com.delidehset.mobile.data.HosetPrefs.hideNsfwMediaState.value
+
         // ---- excerpt ----
-        if (excerptText.isNotBlank()) {
+        if (!compact && excerptText.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = excerptText,
@@ -115,8 +118,17 @@ fun PostCard(
         }
 
         // ---- media ----
-        val image = post.thumbUrl ?: post.images.firstOrNull()
-        if (image != null) {
+        // A post can carry a picture or a clip; a clip gets the play badge and is opened
+        // in the app's own player (the post page) instead of an empty thumbnail.
+        val video = post.mediaHref?.takeIf { post.externalMedia && isVideoUrl(it) }
+        val image = post.thumbUrl
+            ?.takeIf { it.isNotBlank() && !it.contains("default_thumb") }
+            ?: post.images.firstOrNull()?.takeIf { !video.equals(it) }
+        val showMedia = !compact && !(post.nsfw && hideNsfw)
+        if (showMedia && video != null) {
+            Spacer(Modifier.height(8.dp))
+            VideoThumb(url = image, modifier = Modifier.fillMaxWidth())
+        } else if (showMedia && image != null && !isVideoUrl(image)) {
             Spacer(Modifier.height(8.dp))
             AsyncImage(
                 model = DeliHttp.BASE_URL + image,
@@ -156,12 +168,18 @@ fun PostCard(
             }
             Spacer(Modifier.weight(1f))
             post.authorName?.let { name ->
-                Text(
-                    text = "@$name",
-                    color = DeliColors.OnSurfaceVariant,
-                    fontSize = 12.sp,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable { onOpenUser(name) },
-                )
+                ) {
+                    DeliAvatar(url = post.authorAvatar, size = 18.dp, name = name)
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = "@$name",
+                        color = DeliColors.OnSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
                 Spacer(Modifier.width(10.dp))
             }
             Icon(

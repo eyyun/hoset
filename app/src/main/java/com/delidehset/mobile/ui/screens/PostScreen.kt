@@ -50,6 +50,7 @@ import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.components.DeliAvatar
 import com.delidehset.mobile.ui.components.DeliChip
 import com.delidehset.mobile.ui.components.DeliHtml
+import com.delidehset.mobile.ui.components.DeliVideoPlayer
 import com.delidehset.mobile.ui.components.EmptyBox
 import com.delidehset.mobile.ui.components.ErrorBox
 import com.delidehset.mobile.ui.components.LoadingBox
@@ -78,6 +79,7 @@ fun PostScreen(
     var replyText by remember { mutableStateOf("") }
     var showReport by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     LaunchedEffect(permalink) { vm.load(permalink) }
     LaunchedEffect(canVote) { vm.setVoting(canVote) }
@@ -85,7 +87,26 @@ fun PostScreen(
         state.message?.let { onMessage(it); vm.consumeMessage() }
     }
 
-    val flatComments = remember(state.comments) { flatten(state.comments) }
+    // The thread on screen, plus the comment that was just sent if the page has not
+    // caught up with it yet. Without the second part the app looked as if the comment
+    // had gone nowhere: it is added at the end of a long thread, far below the box the
+    // person had just typed into.
+    val flatComments = remember(state.comments, state.posted) {
+        val real = flatten(state.comments)
+        val pending = state.posted
+        if (pending == null || real.any { it.first.id == pending.id }) real
+        else real + (pending to 0)
+    }
+
+    // The first four rows are the header, the body, the actions and the composer; every
+    // comment after them is one row of its own.
+    LaunchedEffect(state.posted?.id) {
+        val id = state.posted?.id ?: return@LaunchedEffect
+        val index = flatComments.indexOfFirst { it.first.id == id }
+        if (index >= 0) {
+            runCatching { listState.animateScrollToItem(4 + index) }
+        }
+    }
 
     when {
         state.loading && state.post == null -> LoadingBox(Modifier.fillMaxSize())
@@ -99,6 +120,7 @@ fun PostScreen(
         else -> {
             val post = state.post!!
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().background(DeliColors.Background),
                 contentPadding = PaddingValues(
                     start = 12.dp,
@@ -126,7 +148,7 @@ fun PostScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            DeliAvatar(url = post.authorAvatar, size = 20.dp)
+                            DeliAvatar(url = post.authorAvatar, size = 20.dp, name = post.authorName)
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = "@${post.authorName ?: "anonim"}",
@@ -155,6 +177,10 @@ fun PostScreen(
                                 modifier = Modifier.fillMaxWidth().clip(DeliShapes.control),
                                 contentScale = ContentScale.FillWidth,
                             )
+                        }
+                        for (video in rendered.videos) {
+                            Spacer(Modifier.height(8.dp))
+                            DeliVideoPlayer(url = video)
                         }
                     }
                 }
@@ -251,7 +277,7 @@ fun PostScreen(
                                         .clip(DeliShapes.small)
                                         .background(if (state.sending) DeliColors.SurfaceVariant else DeliColors.Primary)
                                         .clickable(enabled = !state.sending && replyText.isNotBlank()) {
-                                            vm.sendComment(replyText)
+                                            vm.sendComment(replyText, viewerName)
                                             replyText = ""
                                         }
                                         .padding(horizontal = 18.dp, vertical = 8.dp)
@@ -356,7 +382,7 @@ private fun CommentRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DeliAvatar(url = comment.authorAvatar, size = 18.dp)
+                DeliAvatar(url = comment.authorAvatar, size = 18.dp, name = comment.authorName)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "@${comment.authorName ?: "anonim"}",
