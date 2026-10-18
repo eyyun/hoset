@@ -180,6 +180,21 @@ fun ThemeStoreScreen(
             }
         }
 
+        if (selectedCategory == KitCategory.DETAILED) {
+            item {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val speed = com.delidehset.mobile.data.HosetPrefs.ambientSpeedState.intValue
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(t("Hareketli arka plan"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OptionChip(t("Kapalı"), speed == 0) { com.delidehset.mobile.data.HosetPrefs.setAmbientSpeed(ctx, 0) }
+                        OptionChip(t("Yavaş"), speed == 1) { com.delidehset.mobile.data.HosetPrefs.setAmbientSpeed(ctx, 1) }
+                        OptionChip(t("Normal"), speed == 2) { com.delidehset.mobile.data.HosetPrefs.setAmbientSpeed(ctx, 2) }
+                    }
+                }
+            }
+        }
+
         items(displayedKits, key = { it.id }) { kit ->
             val isCustom = kit.id.startsWith("custom_")
             KitCard(
@@ -205,6 +220,8 @@ fun ThemeStoreScreen(
 private val ACCENT_PRESETS = listOf(
     0xFF805AD5L, 0xFF3B82F6L, 0xFF10B981L, 0xFFF43F5EL,
     0xFFF59E0BL, 0xFFEC4899L, 0xFF06B6D4L, 0xFFA855F7L,
+    0xFFEF4444L, 0xFF84CC16L, 0xFF14B8A6L, 0xFFF97316L,
+    0xFF6366F1L, 0xFFE11D48L, 0xFF0EA5E9L, 0xFFEAB308L,
 )
 
 private val BG_DARK_PRESETS = listOf(
@@ -277,6 +294,8 @@ private fun CustomThemeBuilderDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                KitPreview(previewSpec.toPalette())
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(28) },
@@ -396,16 +415,17 @@ private fun CustomThemeBuilderDialog(
 
                 // Avatar & button style
                 Text(t("Profil & Düğme"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OptionChip(t("yuvarlak"), avatarShape == "CIRCLE") { avatarShape = "CIRCLE" }
                     OptionChip(t("köşeli"), avatarShape == "SQUARE") { avatarShape = "SQUARE" }
                     OptionChip(t("dolu"), buttonStyle == "FILLED") { buttonStyle = "FILLED" }
                     OptionChip(t("yumuşak"), buttonStyle == "SOFT") { buttonStyle = "SOFT" }
+                    OptionChip(t("çizgili"), buttonStyle == "OUTLINED") { buttonStyle = "OUTLINED" }
                 }
 
                 // Corner radius & spacing
                 Text(t("Köşe & Boşluk"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OptionChip("2 dp", radiusStep == 2) { radiusStep = 2 }
                     OptionChip("12 dp", radiusStep == 12) { radiusStep = 12 }
                     OptionChip("22 dp", radiusStep == 22) { radiusStep = 22 }
@@ -422,7 +442,6 @@ private fun CustomThemeBuilderDialog(
                     )
                 }
 
-                KitPreview(previewSpec.toPalette())
             }
         },
         confirmButton = {
@@ -551,15 +570,19 @@ private fun KitCard(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     for (trait in kitTraits(kit)) {
                         Box(
                             modifier = Modifier
                                 .clip(DeliShapes.pill)
                                 .background(DeliColors.SurfaceVariant)
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
                         ) {
-                            Text(t(trait), color = DeliColors.OnSurfaceVariant, fontSize = 9.5.sp)
+                            Text(t(trait), color = DeliColors.OnSurfaceVariant, fontSize = 10.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -677,19 +700,6 @@ private fun KitPreview(kit: Palette) {
             ) {
                 Icon(Icons.Filled.Menu, contentDescription = null, tint = kit.onBackground, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(7.dp))
-                if (isDetailed) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(kit.smallRadius.coerceAtLeast(3.dp)))
-                            .background(kit.primary.copy(alpha = 0.22f))
-                            .border(0.8.dp, kit.primary.copy(alpha = 0.55f), RoundedCornerShape(kit.smallRadius.coerceAtLeast(3.dp))),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(kit.icon, contentDescription = null, tint = kit.primary, modifier = Modifier.size(11.dp))
-                    }
-                    Spacer(Modifier.width(6.dp))
-                }
                 Text("Hoset", color = kit.onBackground, fontSize = 13.sp, fontWeight = kit.titleWeight)
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.Filled.Search, contentDescription = null, tint = kit.onSurfaceVariant, modifier = Modifier.size(14.dp))

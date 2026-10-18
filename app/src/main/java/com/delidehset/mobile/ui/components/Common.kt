@@ -480,8 +480,11 @@ class ManualRefresh internal constructor() {
 @Composable
 fun rememberManualRefresh(loading: Boolean): ManualRefresh {
     val pull = remember { ManualRefresh() }
-    LaunchedEffect(loading, pull) {
-        if (!loading) pull.armed = false
+    LaunchedEffect(loading, pull.active) {
+        if (!loading && pull.active) {
+            kotlinx.coroutines.delay(180)
+            if (!loading) pull.armed = false
+        }
     }
     return pull
 }

@@ -47,6 +47,7 @@ object HosetPrefs {
     private const val KEY_DIM_SEEN_POSTS = "mod_dim_seen_posts"
     private const val KEY_COPY_LONG_PRESS = "mod_copy_long_press"
     private const val KEY_SEEN_POSTS = "mod_seen_posts"
+    private const val KEY_AMBIENT_SPEED = "ambient_speed"
 
     val appTitleState = mutableStateOf("Hoset")
     val fontScaleState = mutableFloatStateOf(1.0f)
@@ -60,6 +61,9 @@ object HosetPrefs {
     val dimSeenPostsState = mutableStateOf(false)
     val copyOnLongPressState = mutableStateOf(true)
     val seenPostsState = mutableStateOf<Set<String>>(emptySet())
+
+    /** Animated theme backgrounds: 0 off, 1 slow, 2 normal. */
+    val ambientSpeedState = androidx.compose.runtime.mutableIntStateOf(2)
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -78,6 +82,13 @@ object HosetPrefs {
         dimSeenPostsState.value = p.getBoolean(KEY_DIM_SEEN_POSTS, false)
         copyOnLongPressState.value = p.getBoolean(KEY_COPY_LONG_PRESS, true)
         seenPostsState.value = p.getStringSet(KEY_SEEN_POSTS, emptySet())?.toSet().orEmpty()
+        ambientSpeedState.intValue = p.getInt(KEY_AMBIENT_SPEED, 2).coerceIn(0, 2)
+    }
+
+    fun setAmbientSpeed(context: Context, speed: Int) {
+        val v = speed.coerceIn(0, 2)
+        prefs(context).edit().putInt(KEY_AMBIENT_SPEED, v).apply()
+        ambientSpeedState.intValue = v
     }
 
     fun ghostTyping(context: Context): Boolean =

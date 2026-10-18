@@ -941,7 +941,7 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
             _posts.update { it + (name to list) }
         }
         if (!force && cached != null) return
-        if (cached == null) _listLoading.value = true
+        _listLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.userPosts(name, force) }
                 .onSuccess { list -> _posts.update { it + (name to list) } }
@@ -955,7 +955,7 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
             _comments.update { it + (name to list) }
         }
         if (!force && cached != null) return
-        if (cached == null) _listLoading.value = true
+        _listLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.userComments(name, force) }
                 .onSuccess { list -> _comments.update { it + (name to list) } }
@@ -1048,7 +1048,7 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
         }
         if (loadedName == name && !force && cached != null) return
         loadedName = name
-        _loading.value = cached == null
+        _loading.value = true
         _error.value = null
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.profile(name, force) }

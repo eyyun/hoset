@@ -169,35 +169,6 @@ fun DeliScaffold(
                         modifier = Modifier.statusBarsPadding(),
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isDetailed) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(RoundedCornerShape(palette.smallRadius.coerceAtLeast(4.dp)))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        palette.primary.copy(alpha = 0.25f),
-                                                        palette.blue.copy(alpha = 0.15f),
-                                                    )
-                                                )
-                                            )
-                                            .border(
-                                                1.dp,
-                                                palette.primary.copy(alpha = 0.55f),
-                                                RoundedCornerShape(palette.smallRadius.coerceAtLeast(4.dp)),
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = palette.icon,
-                                            contentDescription = null,
-                                            tint = palette.primary,
-                                            modifier = Modifier.size(15.dp),
-                                        )
-                                    }
-                                    Spacer(Modifier.width(9.dp))
-                                }
                                 Text(
                                     text = translate(lang, title),
                                     color = DeliColors.OnBackground,
@@ -316,6 +287,13 @@ fun DeliScaffold(
                         if (DeliColors.palette.dividers) {
                             HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
                         }
+                        val navColors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                            selectedIconColor = palette.primary,
+                            selectedTextColor = palette.primary,
+                            unselectedIconColor = palette.onSurfaceVariant,
+                            unselectedTextColor = palette.onSurfaceVariant,
+                            indicatorColor = palette.primary.copy(alpha = 0.18f),
+                        )
                         NavigationBar(
                             modifier = Modifier,
                             windowInsets = WindowInsets(0, 0, 0, 0),
@@ -327,12 +305,14 @@ fun DeliScaffold(
                                 onClick = { onNavigate(Routes.FEED) },
                                 icon = { Icon(Icons.Filled.Home, contentDescription = translate(lang, "Feed")) },
                                 label = { Text(translate(lang, "Feed"), fontSize = 11.sp) },
+                                colors = navColors,
                             )
                             NavigationBarItem(
                                 selected = currentRoute == Routes.HOLES,
                                 onClick = { onNavigate(Routes.HOLES) },
                                 icon = { Icon(Icons.Filled.Groups, contentDescription = translate(lang, "Topluluklar")) },
                                 label = { Text(translate(lang, "Topluluklar"), fontSize = 11.sp) },
+                                colors = navColors,
                             )
                             NavigationBarItem(
                                 selected = currentRoute == chatRoute,
@@ -341,6 +321,7 @@ fun DeliScaffold(
                                 },
                                 icon = { Icon(Icons.Filled.Forum, contentDescription = translate(lang, "Sohbet")) },
                                 label = { Text(translate(lang, "Sohbet"), fontSize = 11.sp) },
+                                colors = navColors,
                             )
                             NavigationBarItem(
                                 selected = currentRoute == ownProfile ||
@@ -362,6 +343,7 @@ fun DeliScaffold(
                                         fontSize = 11.sp,
                                     )
                                 },
+                                colors = navColors,
                             )
                         }
                     }
@@ -390,7 +372,7 @@ fun DeliScaffold(
                 ) {
                     content(contentPadding)
                 }
-                if (isDetailed) {
+                if (isDetailed && com.delidehset.mobile.data.HosetPrefs.ambientSpeedState.intValue != 0) {
                     DetailedAmbientOverlay(palette = palette)
                 }
             }
@@ -570,12 +552,14 @@ fun DetailedAmbientOverlay(
     palette: Palette,
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
+    val speed = com.delidehset.mobile.data.HosetPrefs.ambientSpeedState.intValue
+    val slow = if (speed == 1) 3 else 1
     val transition = rememberInfiniteTransition(label = "detailed_ambient")
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 9000, easing = LinearEasing),
+            animation = tween(durationMillis = 9000 * slow, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "ambient_phase",
@@ -584,7 +568,7 @@ fun DetailedAmbientOverlay(
         initialValue = 0.35f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2800 * slow, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "ambient_pulse",

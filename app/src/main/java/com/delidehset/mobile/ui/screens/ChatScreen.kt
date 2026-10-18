@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Headset
@@ -44,6 +45,8 @@ import androidx.compose.material.icons.filled.HeadsetOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Icon
@@ -357,12 +360,23 @@ fun ChatScreen(
 
                         item {
                             Spacer(Modifier.height(4.dp))
-                            Text(
-                                tf("Sohbette ({0})", chatList.size),
-                                color = DeliColors.OnSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Forum,
+                                    contentDescription = null,
+                                    tint = DeliColors.Success,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Text(
+                                    tf("Sohbette ({0})", chatList.size),
+                                    color = DeliColors.OnSurfaceVariant,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                         }
 
                         itemsIndexed(chatList) { _, u ->
@@ -379,12 +393,23 @@ fun ChatScreen(
                         if (siteList.isNotEmpty()) {
                             item {
                                 Spacer(Modifier.height(8.dp))
-                                Text(
-                                    tf("Sitede Çevrimiçi ({0})", siteList.size),
-                                    color = DeliColors.OnSurfaceVariant,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Public,
+                                        contentDescription = null,
+                                        tint = DeliColors.Blue,
+                                        modifier = Modifier.size(15.dp),
+                                    )
+                                    Text(
+                                        tf("Sitede Çevrimiçi ({0})", siteList.size),
+                                        color = DeliColors.OnSurfaceVariant,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
                             }
 
                             itemsIndexed(siteList) { _, u ->
@@ -633,34 +658,91 @@ private fun RoomHeader(
             .padding(start = 14.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            Icons.Filled.Groups,
-            contentDescription = null,
-            tint = if (stealth) DeliColors.Primary else DeliColors.Success,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(6.dp))
         Column(
             modifier = Modifier
                 .weight(1f)
                 .clickable { onOpenOnline() }
-                .padding(vertical = 9.dp),
+                .padding(vertical = 8.dp),
         ) {
-            val headerLine = when {
-                chatCount > 0 && siteCount > 0 ->
-                    tf("Sohbette ({0})", chatCount) + " · " + tf("Sitede Çevrimiçi ({0})", siteCount)
-                online.isNotEmpty() ->
-                    tf("Çevrimiçi: {0}", online.joinToString(", "))
-                else ->
-                    t("Çevrimiçi")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(DeliShapes.pill)
+                        .background(DeliColors.Success.copy(alpha = 0.14f))
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Forum,
+                        contentDescription = t("Sohbet"),
+                        tint = DeliColors.Success,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = chatCount.toString(),
+                        color = DeliColors.OnBackground,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                if (siteCount > 0) {
+                    Row(
+                        modifier = Modifier
+                            .clip(DeliShapes.pill)
+                            .background(DeliColors.Blue.copy(alpha = 0.14f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Public,
+                            contentDescription = t("Çevrimiçi"),
+                            tint = DeliColors.Blue,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = siteCount.toString(),
+                            color = DeliColors.OnBackground,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                if (stealth) {
+                    Row(
+                        modifier = Modifier
+                            .clip(DeliShapes.pill)
+                            .background(DeliColors.Primary.copy(alpha = 0.16f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.VisibilityOff,
+                            contentDescription = null,
+                            tint = DeliColors.Primary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+
+                if (online.isNotEmpty()) {
+                    Text(
+                        text = online.joinToString(", "),
+                        color = DeliColors.OnSurfaceVariant,
+                        fontSize = 11.5.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
             }
-            Text(
-                headerLine,
-                color = DeliColors.OnBackground,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
+            Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // While you are in the call this line is the answer to the only question
                 // that matters — am I on air — said in the microphone's own words, in

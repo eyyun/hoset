@@ -185,15 +185,17 @@ fun FeedScreen(
                             .size(22.dp)
                             .clickable { vm.toggleHoleBlock(hole) },
                     )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = t("Topluluk ayarları"),
-                        tint = if (holeCanManage) DeliColors.Primary else DeliColors.OnSurfaceVariant,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clickable { onOpenHoleSettings(hole) },
-                    )
+                    if (holeCanManage) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = t("Topluluk ayarları"),
+                            tint = DeliColors.Primary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable { onOpenHoleSettings(hole) },
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(8.dp))

@@ -12,6 +12,12 @@ object WhatsNew {
 
     /** Newest first; the keys are `BuildConfig.VERSION_NAME` shapes. */
     private val byVersion: Map<String, List<String>> = mapOf(
+        "1.3.8" to listOf(
+            "Profilde aşağı çekince takılan yenileme animasyonu düzeldi.",
+            "Sohbetteki çevrimiçi yazıları küçük ikonlu sayılara dönüştü.",
+            "Detaylı temalarda hareketli arka planı kapatabilir veya yavaşlatabilirsin; alt bar da tema renklerini alıyor.",
+            "Topluluk ayar ikonu sadece yönetenlere görünüyor.",
+        ),
         "1.3.7" to listOf(
             "Profiller artık bekletmeden anında açılıyor; kapak ve profil fotoğraflarını büyütüp indirebilirsin.",
             "Hoset Mod özellikleri geldi: sohbette kendini gizleme (hayalet mod), çift dokunuşla beğenme, video/görsel indirme ve gizli Truescore puanı.",
