@@ -339,7 +339,9 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
             val res = runCatching { repo.vote("post", post.id, value) }.getOrNull()
             if (res == null || !res.ok) {
                 _state.update { it.copy(posts = before) }
-                lastError = res?.message ?: "Oy kaydedilemedi."
+                // The vote reverts, and the row snaps back without a word; saying so is the
+                // only way to tell "the site refused" from "my tap did nothing".
+                _message.value = res?.message ?: tr("Oy kaydedilemedi.")
             }
         }
     }
@@ -435,13 +437,32 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
         }
     }
 
+    /**
+     * Optimistic comment vote: the arrow, the score and the reply chain move together.
+     *
+     * The score used to stay where it was while the arrow changed, so a downvote on a
+     * comment looked like it had not registered at all — the number under it is what people
+     * actually read. Reverted, with a message, when the server refuses.
+     */
     fun voteComment(comment: CommentNode, value: Int) {
         val before = _state.value.commentVotes[comment.id] ?: comment.viewerVote
-        _state.update { it.copy(commentVotes = it.commentVotes + (comment.id to value)) }
+        val delta = value - before
+        _state.update {
+            it.copy(
+                commentVotes = it.commentVotes + (comment.id to value),
+                comments = it.comments.adjustScore(comment.id, delta),
+            )
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val res = runCatching { repo.vote("comment", comment.id, value) }.getOrNull()
             if (res == null || !res.ok) {
-                _state.update { it.copy(commentVotes = it.commentVotes + (comment.id to before)) }
+                _state.update {
+                    it.copy(
+                        commentVotes = it.commentVotes + (comment.id to before),
+                        comments = it.comments.adjustScore(comment.id, -delta),
+                        message = res?.message ?: tr("Oy kaydedilemedi."),
+                    )
+                }
             }
         }
     }
@@ -503,6 +524,20 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
     }
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
+}
+
+/**
+ * The same thread with one comment's score moved by [delta].
+ *
+ * A reply is a child, not another row in a flat list, so the change has to walk down the
+ * tree to reach it.
+ */
+internal fun List<CommentNode>.adjustScore(id: String, delta: Int): List<CommentNode> = map { node ->
+    when {
+        node.id == id -> node.copy(score = node.score + delta)
+        node.children.isEmpty() -> node
+        else -> node.copy(children = node.children.adjustScore(id, delta))
+    }
 }
 
 /** Whether the thread already carries this comment, at any depth. */
@@ -671,6 +706,17 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    /**
+     * Bumped whenever a follow changes the counts the viewer's own profile shows.
+     *
+     * That profile can already be in the back stack when somebody is followed from another
+     * one, and a screen that is merely resumed does not re-run its `LaunchedEffect(name)` —
+     * so its "following" number kept the value it had before the follow. The screen keys its
+     * reload on this instead of on the name alone.
+     */
+    private val _followsChanged = MutableStateFlow(0)
+    val followsChanged: StateFlow<Int> = _followsChanged.asStateFlow()
+
     /** The profile's other two tabs, kept per profile so switching back is instant. */
     private val _posts = MutableStateFlow<Map<String, List<FeedPost>>>(emptyMap())
     val posts: StateFlow<Map<String, List<FeedPost>>> = _posts.asStateFlow()
@@ -721,6 +767,7 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
                 .onSuccess { result ->
                     if (result.ok) {
                         _message.value = tr(if (follow) "Takip edildi." else "Takipten çıkıldı.")
+                        _followsChanged.update { it + 1 }
                         load(name, force = true)
                     } else {
                         if (prev != null) _state.update { m -> m + (name to prev) }

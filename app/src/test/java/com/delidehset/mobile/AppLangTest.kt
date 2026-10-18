@@ -217,7 +217,7 @@ class AppLangTest {
             "At the bottom", "back to the newest", "current screen", "could not prepare image",
             "DEPRECATION", "DeliChat", "DeliUpload", "SetJavaScriptEnabled", "UNUSED_PARAMETER",
             "PERSONAL", "SECURITY", "no colour", "image/*", "default-profile-pic", "feed-effort",
-            "ornek@eposta.com", "kullanıcı", "metin", "sil", "@\${profile.name}",
+            "ornek@eposta.com", "kullanıcı", "metin", "sil", "gönderi", "@\${profile.name}",
         )
     }
 }

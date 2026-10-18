@@ -115,6 +115,8 @@ data class Hole(
     val stealth: String?,
     val publicUse: String?,
     val description: String? = null,
+    /** The community's own picture, as the site's table renders it. */
+    val logo: String? = null,
 )
 
 /** What a community's own page says about the viewer's relationship to it. */
@@ -266,6 +268,8 @@ data class UserComment(
     val postHref: String?,
     val postLabel: String?,
     val bodyHtml: String,
+    /** The comment's score as the site printed it; 0 when the row did not carry one. */
+    val score: Int = 0,
 ) {
     val text: String get() = HtmlParser.stripTags(bodyHtml)
 }

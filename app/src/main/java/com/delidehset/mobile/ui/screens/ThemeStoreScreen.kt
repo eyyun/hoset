@@ -63,13 +63,25 @@ import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import com.delidehset.mobile.ui.theme.AvatarShape
 import com.delidehset.mobile.ui.theme.ButtonStyle
 import com.delidehset.mobile.ui.theme.CardStyle
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.DeliPalettes
 import com.delidehset.mobile.ui.theme.DeliShapes
+import com.delidehset.mobile.ui.theme.KitCategory
+import com.delidehset.mobile.ui.theme.KitMotion
 import com.delidehset.mobile.ui.theme.Palette
+import com.delidehset.mobile.ui.theme.SurfaceEffect
 import com.delidehset.mobile.ui.theme.avatarShape
 import com.delidehset.mobile.ui.theme.controlShape
 import com.delidehset.mobile.ui.theme.kitTraits
@@ -90,7 +102,13 @@ fun ThemeStoreScreen(
     contentPadding: PaddingValues,
 ) {
     var showBuilder by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf(KitCategory.SIMPLE) }
     val allKits = DeliPalettes.available
+    val simpleCount = remember(allKits) { allKits.count { it.category == KitCategory.SIMPLE } }
+    val detailedCount = remember(allKits) { allKits.count { it.category == KitCategory.DETAILED } }
+    val displayedKits = remember(allKits, selectedCategory) {
+        allKits.filter { it.category == selectedCategory }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(DeliColors.Background),
@@ -141,7 +159,27 @@ fun ThemeStoreScreen(
             }
         }
 
-        items(allKits, key = { it.id }) { kit ->
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CategoryTab(
+                    label = tf("{0} ({1})", t("Basit"), simpleCount),
+                    selected = selectedCategory == KitCategory.SIMPLE,
+                    onClick = { selectedCategory = KitCategory.SIMPLE },
+                    modifier = Modifier.weight(1f),
+                )
+                CategoryTab(
+                    label = tf("{0} ({1})", t("Detaylı"), detailedCount),
+                    selected = selectedCategory == KitCategory.DETAILED,
+                    onClick = { selectedCategory = KitCategory.DETAILED },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        items(displayedKits, key = { it.id }) { kit ->
             val isCustom = kit.id.startsWith("custom_")
             KitCard(
                 kit = kit,
@@ -189,6 +227,9 @@ private fun CustomThemeBuilderDialog(
     onSave: (CustomThemeSpec) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("SIMPLE") }
+    var motion by remember { mutableStateOf("NONE") }
+    var surfaceEffect by remember { mutableStateOf("SOLID") }
     var dark by remember { mutableStateOf(true) }
     var primaryHex by remember { mutableLongStateOf(ACCENT_PRESETS.first()) }
     var bgPair by remember { mutableStateOf(BG_DARK_PRESETS.first()) }
@@ -199,7 +240,7 @@ private fun CustomThemeBuilderDialog(
     var spacingStep by remember { mutableIntStateOf(12) }
     var dividers by remember { mutableStateOf(true) }
 
-    val previewSpec = remember(name, dark, primaryHex, bgPair, cardStyle, avatarShape, buttonStyle, radiusStep, spacingStep, dividers) {
+    val previewSpec = remember(name, category, motion, surfaceEffect, dark, primaryHex, bgPair, cardStyle, avatarShape, buttonStyle, radiusStep, spacingStep, dividers) {
         CustomThemeSpec(
             id = "custom_preview",
             name = name.ifBlank { "Özel Tema" },
@@ -216,6 +257,9 @@ private fun CustomThemeBuilderDialog(
             surfaceHex = bgPair.second,
             primaryHex = primaryHex,
             blueHex = primaryHex,
+            category = category,
+            motion = motion,
+            surfaceEffect = surfaceEffect,
         )
     }
 
@@ -245,6 +289,39 @@ private fun CustomThemeBuilderDialog(
                         unfocusedTextColor = DeliColors.OnBackground,
                     ),
                 )
+
+                // Category: Basit / Detaylı
+                Text(t("Kategori"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OptionChip(t("Basit"), category == "SIMPLE") {
+                        category = "SIMPLE"
+                        motion = "NONE"
+                        surfaceEffect = "SOLID"
+                    }
+                    OptionChip(t("Detaylı"), category == "DETAILED") {
+                        category = "DETAILED"
+                        if (motion == "NONE") {
+                            motion = "PULSE"
+                            surfaceEffect = "GLOW"
+                        }
+                    }
+                }
+
+                if (category == "DETAILED") {
+                    Text(t("Hareket"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OptionChip(t("Sakin"), motion == "NONE") { motion = "NONE"; surfaceEffect = "SOLID" }
+                        OptionChip(t("Işıma"), motion == "PULSE") { motion = "PULSE"; surfaceEffect = "GLOW" }
+                        OptionChip(t("Gradyan"), motion == "SHIFT") { motion = "SHIFT"; surfaceEffect = "GRADIENT" }
+                        OptionChip(t("Yaylanan"), motion == "BOUNCE") { motion = "BOUNCE"; surfaceEffect = "SOLID" }
+                        OptionChip(t("Süzülen"), motion == "FLOAT") { motion = "FLOAT"; surfaceEffect = "SOLID" }
+                        OptionChip(t("Dalgalanan"), motion == "RIPPLE") { motion = "RIPPLE"; surfaceEffect = "GRADIENT" }
+                        OptionChip(t("Neon Akış"), motion == "NEON") { motion = "NEON"; surfaceEffect = "NEON_BORDER" }
+                    }
+                }
 
                 // Mode: Dark / Light
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -363,6 +440,35 @@ private fun CustomThemeBuilderDialog(
             }
         },
     )
+}
+
+@Composable
+private fun CategoryTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(DeliShapes.control)
+            .background(if (selected) DeliColors.Primary else DeliColors.Surface)
+            .border(
+                width = 1.dp,
+                color = if (selected) DeliColors.Primary else DeliColors.Border,
+                shape = DeliShapes.control,
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.White else DeliColors.OnBackground,
+            fontSize = 13.5.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        )
+    }
 }
 
 @Composable
@@ -489,6 +595,66 @@ private fun KitCard(
 @Composable
 private fun KitPreview(kit: Palette) {
     val shape = RoundedCornerShape(kit.cardRadius)
+    val motionModifier = when (kit.motion) {
+        KitMotion.FLOAT -> {
+            val transition = rememberInfiniteTransition(label = "kit_preview_float")
+            val floatY by transition.animateFloat(
+                initialValue = -3f,
+                targetValue = 3f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(2200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "floatY",
+            )
+            Modifier.graphicsLayer { translationY = floatY }
+        }
+        KitMotion.BOUNCE -> {
+            val transition = rememberInfiniteTransition(label = "kit_preview_bounce")
+            val bScale by transition.animateFloat(
+                initialValue = 0.985f,
+                targetValue = 1.015f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1300, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "bScale",
+            )
+            Modifier.graphicsLayer { scaleX = bScale; scaleY = bScale }
+        }
+        else -> Modifier
+    }
+
+    val glowAlpha = when (kit.motion) {
+        KitMotion.PULSE -> {
+            val transition = rememberInfiniteTransition(label = "kit_preview_pulse")
+            val alpha by transition.animateFloat(
+                initialValue = 0.35f,
+                targetValue = 0.9f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "pulseAlpha",
+            )
+            alpha
+        }
+        KitMotion.NEON -> {
+            val transition = rememberInfiniteTransition(label = "kit_preview_neon")
+            val alpha by transition.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 1.0f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "neonAlpha",
+            )
+            alpha
+        }
+        else -> 0.5f
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -519,7 +685,8 @@ private fun KitPreview(kit: Palette) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(previewSurface(kit, RoundedCornerShape(kit.cardRadius)))
+                    .then(motionModifier)
+                    .then(previewSurface(kit, RoundedCornerShape(kit.cardRadius), glowAlpha))
                     .padding(kit.spacing * 0.7f),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -626,7 +793,7 @@ private fun PreviewTab(kit: Palette, icon: androidx.compose.ui.graphics.vector.I
 }
 
 /** A card's chrome in the kit's idiom: filled, then outlined, lifted or left bare. */
-private fun previewSurface(kit: Palette, shape: Shape): Modifier {
+private fun previewSurface(kit: Palette, shape: Shape, glowAlpha: Float = 0.5f): Modifier {
     var modifier: Modifier = Modifier
     if (kit.cardStyle == CardStyle.ELEVATED) {
         modifier = modifier.shadow(
@@ -636,8 +803,38 @@ private fun previewSurface(kit: Palette, shape: Shape): Modifier {
             spotColor = Color.Black.copy(alpha = 0.55f),
         )
     }
-    modifier = modifier.clip(shape).background(kit.surface)
-    if (kit.cardStyle == CardStyle.OUTLINED) modifier = modifier.border(1.dp, kit.border, shape)
+    when (kit.surfaceEffect) {
+        SurfaceEffect.GRADIENT -> {
+            modifier = modifier.clip(shape).background(
+                Brush.verticalGradient(listOf(kit.surface, kit.gradientEnd))
+            )
+        }
+        SurfaceEffect.METALLIC -> {
+            modifier = modifier.clip(shape).background(
+                Brush.linearGradient(listOf(kit.surface, kit.surfaceVariant, kit.surface))
+            )
+        }
+        SurfaceEffect.GLASS -> {
+            modifier = modifier.clip(shape).background(
+                kit.surface.copy(alpha = if (kit.dark) 0.85f else 0.90f)
+            )
+        }
+        else -> {
+            modifier = modifier.clip(shape).background(kit.surface)
+        }
+    }
+    val glowTint = if (kit.glowColor != Color.Transparent) kit.glowColor else kit.primary
+    when {
+        kit.surfaceEffect == SurfaceEffect.NEON_BORDER -> {
+            modifier = modifier.border(1.5.dp, glowTint.copy(alpha = glowAlpha), shape)
+        }
+        kit.surfaceEffect == SurfaceEffect.GLOW && kit.glowColor != Color.Transparent -> {
+            modifier = modifier.border(1.dp, kit.glowColor.copy(alpha = glowAlpha), shape)
+        }
+        kit.cardStyle == CardStyle.OUTLINED -> {
+            modifier = modifier.border(1.dp, kit.border, shape)
+        }
+    }
     return modifier
 }
 

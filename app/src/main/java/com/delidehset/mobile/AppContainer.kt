@@ -2,6 +2,7 @@ package com.delidehset.mobile
 
 import android.content.Context
 import coil.Coil
+import com.delidehset.mobile.data.ChatSession
 import com.delidehset.mobile.data.CookieStore
 import com.delidehset.mobile.data.DeliCache
 import com.delidehset.mobile.data.DeliHttp
@@ -28,6 +29,15 @@ class AppContainer(context: Context) {
     val cache = DeliCache(context)
 
     val repository = DeliRepository(http, cookies, session, cache)
+
+    /**
+     * The chat room's transport, owned by the app rather than by the chat screen.
+     *
+     * It has to outlive the screen: rebuilding the room's WebView, its token and its socket
+     * every time somebody glanced at their profile is what made Sohbet open empty and slow.
+     * Closing it is the job of [MainActivity.onStop] and of signing out.
+     */
+    val chat = ChatSession(appContext, http, cookies)
 
     /**
      * The session, for pictures.

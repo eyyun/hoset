@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.delidehset.mobile.data.DeliNotification
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
@@ -49,6 +51,7 @@ import kotlin.math.absoluteValue
  * read. The app keeps that shape — the only thing it adds is a tap target that goes
  * straight to the comment.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     vm: NotificationsViewModel,
@@ -67,8 +70,15 @@ fun NotificationsScreen(
         state.error != null && state.page.items.isEmpty() ->
             ErrorBox(state.error!!, Modifier.fillMaxSize(), onRetry = { vm.load(force = true) })
 
-        else -> LazyColumn(
+        // Pull to refresh, like the feed, the profile and the communities: the list is asked
+        // again instead of trusting whatever the screen was opened with.
+        else -> PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = { vm.load(force = true) },
             modifier = Modifier.fillMaxSize().background(DeliColors.Background),
+        ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 12.dp,
                 end = 12.dp,
@@ -129,6 +139,7 @@ fun NotificationsScreen(
             items(state.page.items, key = { it.id + it.hashCode().absoluteValue }) { row ->
                 NotificationRow(row) { row.postHref?.let(onOpenPost) }
             }
+        }
         }
     }
 }

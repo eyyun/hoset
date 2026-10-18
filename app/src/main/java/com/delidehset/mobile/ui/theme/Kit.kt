@@ -1,7 +1,13 @@
 package com.delidehset.mobile.ui.theme
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -9,9 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -80,9 +90,73 @@ fun Modifier.kitSurface(
             spotColor = Color.Black.copy(alpha = 0.55f),
         )
     }
-    modifier = modifier.clip(shape).background(kit.surface)
-    if (kit.cardStyle == CardStyle.OUTLINED) modifier = modifier.border(1.dp, kit.border, shape)
+
+    when (kit.surfaceEffect) {
+        SurfaceEffect.GRADIENT -> {
+            modifier = modifier.clip(shape).background(
+                Brush.verticalGradient(listOf(kit.surface, kit.gradientEnd))
+            )
+        }
+        SurfaceEffect.METALLIC -> {
+            modifier = modifier.clip(shape).background(
+                Brush.linearGradient(listOf(kit.surface, kit.surfaceVariant, kit.surface))
+            )
+        }
+        SurfaceEffect.GLASS -> {
+            modifier = modifier.clip(shape).background(
+                kit.surface.copy(alpha = if (kit.dark) 0.85f else 0.90f)
+            )
+        }
+        else -> {
+            modifier = modifier.clip(shape).background(kit.surface)
+        }
+    }
+
+    when {
+        kit.surfaceEffect == SurfaceEffect.NEON_BORDER -> {
+            val tint = if (kit.glowColor != Color.Transparent) kit.glowColor else kit.primary
+            modifier = modifier.border(1.5.dp, tint, shape)
+        }
+        kit.surfaceEffect == SurfaceEffect.GLOW && kit.glowColor != Color.Transparent -> {
+            modifier = modifier.border(1.dp, kit.glowColor.copy(alpha = 0.45f), shape)
+        }
+        kit.cardStyle == CardStyle.OUTLINED -> {
+            modifier = modifier.border(1.dp, kit.border, shape)
+        }
+    }
+
     return modifier.padding(padding)
+}
+
+/**
+ * Interactive touch feedback that expresses the kit's motion character.
+ * When a bouncy kit is on, clicks feel springy and responsive.
+ */
+@Composable
+fun Modifier.kitInteractive(
+    kit: Palette = DeliColors.palette,
+    onClick: () -> Unit,
+): Modifier {
+    if (kit.motion != KitMotion.BOUNCE) {
+        return this.clickable(onClick = onClick)
+    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "kit_bounce_scale",
+    )
+    return this
+        .scale(scale)
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick,
+        )
 }
 
 /** What a kit's buttons are painted with. */
@@ -117,6 +191,22 @@ fun Modifier.kitButtonOutline(kit: Palette = DeliColors.palette): Modifier =
  * to the preview: `çerçeveli · yuvarlak · dolu · ferah`.
  */
 fun kitTraits(kit: Palette): List<String> = buildList {
+    if (kit.category == KitCategory.DETAILED) {
+        when (kit.motion) {
+            KitMotion.PULSE -> add("ışıma")
+            KitMotion.SHIFT -> add("gradyan")
+            KitMotion.BOUNCE -> add("yaylanan")
+            KitMotion.FLOAT -> add("süzülen")
+            KitMotion.RIPPLE -> add("dalgalanan")
+            KitMotion.NEON -> add("neon")
+            KitMotion.NONE -> {}
+        }
+        when (kit.surfaceEffect) {
+            SurfaceEffect.GLASS -> add("buzlu cam")
+            SurfaceEffect.METALLIC -> add("metalik")
+            else -> {}
+        }
+    }
     add(
         when (kit.cardStyle) {
             CardStyle.OUTLINED -> "çerçeveli"
@@ -140,3 +230,4 @@ fun kitTraits(kit: Palette): List<String> = buildList {
         }
     )
 }.distinct()
+

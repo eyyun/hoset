@@ -32,6 +32,7 @@ import com.delidehset.mobile.ui.deliContainer
 import com.delidehset.mobile.ui.translate
 import com.delidehset.mobile.ui.tr
 import com.delidehset.mobile.ui.deliViewModel
+import com.delidehset.mobile.ui.nav.DeepLinks
 import com.delidehset.mobile.ui.nav.Routes
 import com.delidehset.mobile.ui.screens.AccountSettingsScreen
 import com.delidehset.mobile.ui.screens.AuthWebScreen
@@ -73,13 +74,44 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        incomingLink.value = intent?.dataString?.takeIf { it.startsWith("http") }
         setContent { DeliTheme { DeliRoot() } }
+    }
+
+    /**
+     * A delidehset.com link, while the app is already running.
+     *
+     * singleTop means the system hands the new intent to this instance instead of building a
+     * second one, so the link arrives here rather than in [onCreate].
+     */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingLink.value = intent.dataString?.takeIf { it.startsWith("http") }
+    }
+
+    /**
+     * The app left the front. The room stays connected for a while — coming back to a chat
+     * you just left should not rebuild it — and the session closes it on its own once it has
+     * been out of sight long enough.
+     */
+    override fun onStop() {
+        super.onStop()
+        (application as? DeliApp)?.container?.chat?.onBackground()
     }
 
     companion object {
         /** What a system notification asks the app to open, if anything. */
         const val EXTRA_OPEN = "hoset.open"
         const val OPEN_NOTIFICATIONS = "notifications"
+
+        /**
+         * The site link the app was asked to open, until the router has taken it.
+         *
+         * A plain state, not a saved one: a link is a one-off instruction, and replaying it
+         * after a screen rotation would move the reader a second time.
+         */
+        val incomingLink = androidx.compose.runtime.mutableStateOf<String?>(null)
     }
 }
 
@@ -121,6 +153,21 @@ private fun DeliRoot() {
             ?.getStringExtra(MainActivity.EXTRA_OPEN)
         if (requested == MainActivity.OPEN_NOTIFICATIONS) nav.navigate(Routes.NOTIFICATIONS)
     }
+    // A delidehset.com link — from a browser, a message or another app — opens the screen
+    // that link is about: a post, a profile, a community. Anything else the site has is
+    // shown in the app's own web frame rather than the browser.
+    val incoming = MainActivity.incomingLink.value
+    LaunchedEffect(incoming) {
+        val raw = incoming ?: return@LaunchedEffect
+        MainActivity.incomingLink.value = null
+        val own = DeepLinks.routeFor(raw)
+        val path = DeepLinks.pathFor(raw)
+        when {
+            own != null -> nav.navigate(own)
+            path != null -> nav.navigate(Routes.web(path, "Bağlantı"))
+        }
+    }
+
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route ?: Routes.FEED
     // The route *pattern* is the same for every "page" destination, so the sidebar needs
@@ -158,6 +205,8 @@ private fun DeliRoot() {
         },
         onLogout = {
             appVm.logout()
+            // The room's socket belongs to the account that was signed in.
+            container.chat.close()
             clearWebSession()
             nav.navigate(Routes.FEED) {
                 popUpTo(Routes.FEED) { inclusive = false }
@@ -298,17 +347,27 @@ private fun DeliRoot() {
             }
 
             composable(
-                route = "post?permalink={permalink}",
-                arguments = listOf(navArgument("permalink") {
-                    type = NavType.StringType
-                    defaultValue = ""
-                }),
+                route = "post?permalink={permalink}&comment={comment}",
+                arguments = listOf(
+                    navArgument("permalink") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    // The comment to land on, when the post was opened from a profile's
+                    // comment row: the screen scrolls to it and marks it for a moment.
+                    navArgument("comment") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
             ) { entry ->
                 val permalink = entry.arguments?.getString("permalink").orEmpty()
+                val comment = entry.arguments?.getString("comment").orEmpty().takeIf { it.isNotBlank() }
                 val vm = deliViewModel("post-$permalink") { PostViewModel(it.repository) }
                 PostScreen(
                     vm = vm,
                     permalink = permalink,
+                    highlightComment = comment,
                     canVote = true,
                     signedIn = viewer.isSignedIn,
                     viewerName = viewer.username,
@@ -438,6 +497,9 @@ private fun DeliRoot() {
                         nav.navigate(Routes.relations(owner, followers))
                     },
                     onOpenPost = { nav.navigate(Routes.post(it)) },
+                    onOpenPostAtComment = { permalink, comment ->
+                        nav.navigate(Routes.post(permalink, comment))
+                    },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
                     onMessage = { appVm.showMessage(it) },
                 )
@@ -642,3 +704,5 @@ private fun titleFor(route: String, args: Bundle?): String = when {
     }
     else -> com.delidehset.mobile.data.HosetPrefs.appTitleState.value
 }
+
+

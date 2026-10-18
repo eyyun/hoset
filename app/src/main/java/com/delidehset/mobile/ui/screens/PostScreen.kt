@@ -58,6 +58,8 @@ import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.components.ThinDivider
 import com.delidehset.mobile.ui.components.VoteArrows
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
+import kotlinx.coroutines.delay
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.PostViewModel
 import com.delidehset.mobile.ui.theme.DeliShapes
@@ -66,6 +68,8 @@ import com.delidehset.mobile.ui.theme.DeliShapes
 fun PostScreen(
     vm: PostViewModel,
     permalink: String,
+    /** The comment to land on, when the post was opened from a profile's comment row. */
+    highlightComment: String? = null,
     canVote: Boolean,
     signedIn: Boolean,
     viewerName: String?,
@@ -118,6 +122,20 @@ fun PostScreen(
         if (index >= 0) {
             runCatching { listState.animateScrollToItem(4 + index) }
         }
+    }
+
+    // Landing on a comment means finding it: the thread can be long, and a silent jump
+    // somewhere in the middle of it reads as nothing having happened at all. The list goes
+    // to the comment and marks it, and the mark comes off by itself a moment later.
+    var lit by remember(highlightComment) { mutableStateOf(highlightComment) }
+    LaunchedEffect(highlightComment, flatComments.size) {
+        val wanted = highlightComment ?: return@LaunchedEffect
+        val index = flatComments.indexOfFirst { it.first.id == wanted }
+        if (index < 0) return@LaunchedEffect
+        // The first four rows are the header, the body, the actions and the composer.
+        runCatching { listState.animateScrollToItem(4 + index) }
+        delay(2400)
+        lit = null
     }
 
     when {
@@ -313,6 +331,7 @@ fun PostScreen(
                         CommentRow(
                             comment = comment,
                             depth = depth,
+                            highlighted = lit != null && comment.id == lit,
                             viewerVote = state.commentVotes[comment.id] ?: comment.viewerVote,
                             canVote = canVote,
                             onVote = { vm.voteComment(comment, it) },
@@ -384,6 +403,8 @@ private fun siteColor(raw: String?): Color? {
 private fun CommentRow(
     comment: CommentNode,
     depth: Int,
+    /** The comment the screen was opened for: its card is outlined until the moment passes. */
+    highlighted: Boolean = false,
     viewerVote: Int,
     canVote: Boolean,
     onVote: (Int) -> Unit,
@@ -396,7 +417,11 @@ private fun CommentRow(
             .fillMaxWidth()
             .padding(start = (depth.coerceAtMost(6) * 14).dp)
             .clip(DeliShapes.control)
-            .background(DeliColors.Surface)
+            .then(
+                if (highlighted) Modifier.border(1.5.dp, DeliColors.Primary, DeliShapes.control)
+                else Modifier
+            )
+            .background(if (highlighted) DeliColors.Primary.copy(alpha = 0.12f) else DeliColors.Surface)
             .padding(10.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {

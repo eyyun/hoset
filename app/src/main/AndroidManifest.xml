@@ -49,15 +49,33 @@
             simply covers it; the app lifts the content it wants lifted (the chat
             composer) by the IME inset itself — see DeliScaffold.
         -->
+        <!--
+            singleTop, because a link belongs in the app that is already open: a second
+            copy of the app on top of itself is what the default launch mode would give.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustNothing"
             android:theme="@style/Theme.Delidehset">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                The site's own links: tapping one in a browser, a message or any other app
+                opens Hoset instead of the browser, and the router below turns it into the
+                screen that link is about.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="delidehset.com" />
+                <data android:scheme="http" android:host="delidehset.com" />
             </intent-filter>
         </activity>
 

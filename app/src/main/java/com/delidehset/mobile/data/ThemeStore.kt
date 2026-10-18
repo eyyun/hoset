@@ -15,7 +15,10 @@ import com.delidehset.mobile.ui.theme.AvatarShape
 import com.delidehset.mobile.ui.theme.ButtonStyle
 import com.delidehset.mobile.ui.theme.CardStyle
 import com.delidehset.mobile.ui.theme.DeliPalettes
+import com.delidehset.mobile.ui.theme.KitCategory
+import com.delidehset.mobile.ui.theme.KitMotion
 import com.delidehset.mobile.ui.theme.Palette
+import com.delidehset.mobile.ui.theme.SurfaceEffect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -41,6 +44,9 @@ data class CustomThemeSpec(
     val surfaceHex: Long = 0xFF161B22,
     val primaryHex: Long = 0xFF805AD5,
     val blueHex: Long = 0xFF58A6FF,
+    val category: String = "SIMPLE",
+    val motion: String = "NONE",
+    val surfaceEffect: String = "SOLID",
 ) {
     fun toPalette(): Palette {
         val bg = Color(backgroundHex)
@@ -53,6 +59,9 @@ data class CustomThemeSpec(
         val onSurfVar = if (dark) Color(0xFF8B949E) else Color(0xFF606875)
         val primCont = blendColor(prim, bg, 0.65f)
         val base = DeliPalettes.fallback
+        val cat = runCatching { KitCategory.valueOf(category) }.getOrDefault(KitCategory.SIMPLE)
+        val mot = runCatching { KitMotion.valueOf(motion) }.getOrDefault(KitMotion.NONE)
+        val eff = runCatching { SurfaceEffect.valueOf(surfaceEffect) }.getOrDefault(SurfaceEffect.SOLID)
         return Palette(
             id = id,
             name = name,
@@ -82,6 +91,11 @@ data class CustomThemeSpec(
             success = base.success,
             warning = base.warning,
             danger = base.danger,
+            category = cat,
+            motion = mot,
+            surfaceEffect = eff,
+            glowColor = if (eff == SurfaceEffect.GLOW || eff == SurfaceEffect.NEON_BORDER) prim else Color.Transparent,
+            gradientEnd = surfVar,
         )
     }
 }

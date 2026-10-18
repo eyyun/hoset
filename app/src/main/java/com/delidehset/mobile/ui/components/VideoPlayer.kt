@@ -120,8 +120,39 @@ fun DeliVideoPlayer(
         if (total > 0) player.seekTo((total * fraction.coerceIn(0f, 1f)).toLong())
     }
 
+    // Which way the last skip went, so the player can say "+5 sn" where the finger was. It
+    // clears itself a moment later; nothing here needs to be remembered.
+    var skipHint by remember { mutableStateOf(0) }
+    LaunchedEffect(skipHint) {
+        if (skipHint != 0) {
+            delay(700)
+            skipHint = 0
+        }
+    }
+    fun skipByTouch(forward: Boolean) {
+        val total = player.duration.coerceAtLeast(0L)
+        val step = if (forward) 5_000L else -5_000L
+        val target = (player.currentPosition + step)
+            .coerceIn(0L, if (total > 0) total else Long.MAX_VALUE)
+        player.seekTo(target)
+        skipHint = if (forward) 1 else -1
+    }
+
     fun toggle() {
         if (player.isPlaying) player.pause() else player.play()
+    }
+
+    /**
+     * Five seconds either way, the way every video app does it: a double tap on the right
+     * half goes forward, on the left half back. It seeks from the position on screen rather
+     * than from the last known one, and stops at either end instead of wrapping.
+     */
+    fun skip(forward: Boolean): Long {
+        val total = player.duration.coerceAtLeast(0L)
+        val step = if (forward) 5_000L else -5_000L
+        val target = (player.currentPosition + step).coerceIn(0L, if (total > 0) total else Long.MAX_VALUE)
+        player.seekTo(target)
+        return target
     }
 
     Box(
@@ -155,8 +186,35 @@ fun DeliVideoPlayer(
                         listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.55f))
                     )
                 )
-                .pointerInput(player) { detectTapGestures { toggle() } },
+                .pointerInput(player) {
+                    detectTapGestures(
+                        onTap = { toggle() },
+                        onDoubleTap = { offset ->
+                            skipByTouch(forward = offset.x > size.width / 2f)
+                        },
+                    )
+                },
         )
+
+        // Where the double tap landed, in the words of the gesture: which half was tapped is
+        // obvious to the finger and invisible to the picture, so it is said out loud.
+        if (skipHint != 0) {
+            Box(
+                modifier = Modifier
+                    .align(if (skipHint > 0) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(horizontal = 14.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (skipHint > 0) "5 sn  \u00bb" else "\u00ab  5 sn",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                )
+            }
+        }
 
         if (buffering && !playing) {
             Box(Modifier.align(Alignment.Center)) {
@@ -269,7 +327,12 @@ fun DeliVideoPlayer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(player) { detectTapGestures { toggle() } },
+                        .pointerInput(player) {
+                            detectTapGestures(
+                                onTap = { toggle() },
+                                onDoubleTap = { offset -> skipByTouch(forward = offset.x > size.width / 2f) },
+                            )
+                        },
                 )
                 Row(
                     modifier = Modifier

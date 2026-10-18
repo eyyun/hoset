@@ -103,6 +103,8 @@ fun HosetSettingsScreen(
     var showNameDialog by remember { mutableStateOf(false) }
     var launcher by remember { mutableStateOf(HosetPrefs.launcherVariant(context)) }
     var showIconDialog by remember { mutableStateOf(false) }
+    // A picture the person just picked, waiting to be cropped.
+    var pickedIcon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var fontScale by remember { mutableFloatStateOf(HosetPrefs.fontScale(context)) }
     var showFontDialog by remember { mutableStateOf(false) }
     var defaultSort by remember { mutableStateOf(HosetPrefs.defaultSort(context)) }
@@ -111,6 +113,17 @@ fun HosetSettingsScreen(
     var compactFeed by remember { mutableStateOf(HosetPrefs.compactFeed(context)) }
     var autoUpdate by remember { mutableStateOf(HosetPrefs.autoUpdate(context)) }
     var cacheCleared by remember { mutableStateOf(false) }
+
+    // The gallery, through the platform picker: no storage permission is asked for, and the
+    // app never sees more than the one picture that was chosen.
+    val pickIcon = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        pickedIcon = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream)
+            }
+        }.getOrNull()
+    }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permitted = granted
@@ -465,6 +478,31 @@ fun HosetSettingsScreen(
                             }
                         }
                     }
+
+                    // A face of your own, pinned as a second icon: Android fixes the app's
+                    // installed icon at build time, so the crop becomes a home-screen
+                    // shortcut carrying the same app and label.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(DeliShapes.control)
+                            .background(DeliColors.Background)
+                            .clickable {
+                                showIconDialog = false
+                                pickIcon.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                    ),
+                                )
+                            }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(t("Kendi simgen"), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(t("Galeriden bir görsel seç"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -536,6 +574,23 @@ fun HosetSettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showSortDialog = false }) { Text(t("Kapat"), color = DeliColors.OnSurfaceVariant) }
+            },
+        )
+    }
+
+    // The picture that was just picked: crop it, then put it on the home screen.
+    pickedIcon?.let { picture ->
+        IconCropDialog(
+            bitmap = picture,
+            title = t("Görseli kırp"),
+            onDismiss = { pickedIcon = null },
+            onCropped = { cropped ->
+                com.delidehset.mobile.data.IconStore.saveAndPin(
+                    context = context,
+                    cropped = cropped,
+                    label = HosetPrefs.appTitle(context),
+                )
+                pickedIcon = null
             },
         )
     }

@@ -30,12 +30,15 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +80,7 @@ import com.delidehset.mobile.vm.ProfileViewModel
  * even though the profile page ships them. Now the wall is those cards, the other two tabs
  * are their own pages, and every list opens a post in the app rather than in a browser.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     vm: ProfileViewModel,
@@ -93,6 +97,11 @@ fun ProfileScreen(
     onOpenRelations: (name: String, followers: Boolean) -> Unit = { _, _ -> },
     /** A post from any of the three tabs, opened natively. */
     onOpenPost: (permalink: String) -> Unit = {},
+    /**
+     * A comment row's own destination: the post it belongs to, plus the comment to land on.
+     * Falls back to the plain post when a caller only knows how to open one.
+     */
+    onOpenPostAtComment: (permalink: String, commentId: String) -> Unit = { permalink, _ -> onOpenPost(permalink) },
     /** An account named on a post card. */
     onOpenUser: (name: String) -> Unit = {},
 ) {
@@ -104,8 +113,13 @@ fun ProfileScreen(
     val postsByUser by vm.posts.collectAsStateWithLifecycle()
     val commentsByUser by vm.comments.collectAsStateWithLifecycle()
     val listLoading by vm.listLoading.collectAsStateWithLifecycle()
+    val followsChanged by vm.followsChanged.collectAsStateWithLifecycle()
 
-    var tab by remember(name) { mutableStateOf("wall") }
+    // Saveable, not merely remembered: opening a comment and coming back used to drop the
+    // reader on the wall again, as if they had never been in Yorumlar. The saved value
+    // belongs to this profile's entry in the back stack, so returning restores the tab and
+    // opening another profile still starts at the wall.
+    var tab by rememberSaveable(name) { mutableStateOf("wall") }
     LaunchedEffect(tab, name) {
         when (tab) {
             "posts" -> vm.loadPosts(name)
@@ -117,7 +131,15 @@ fun ProfileScreen(
         vmMessage?.let { onMessage(it); vm.consumeMessage() }
     }
 
-    LaunchedEffect(name) { vm.load(name) }
+    // Your own profile is refreshed even when the page is already in the cache: its
+    // follower and following counts move when you follow somebody, and a cached page kept
+    // saying "0" long after the follow had gone through. Somebody else's profile is read
+    // from the cache as before, so opening one is still instant.
+    //
+    // `followsChanged` is the second half of that: this screen may already be in the back
+    // stack when the follow happens elsewhere, and coming back to it does not re-run an
+    // effect keyed on the name alone.
+    LaunchedEffect(name, followsChanged) { vm.load(name, force = isSelf || followsChanged > 0) }
     val profile = profiles[name]
 
     val followersLabel = t("Takipçi")
@@ -135,10 +157,22 @@ fun ProfileScreen(
             onRetry = { vm.load(name, force = true) },
         )
 
-        else -> LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(DeliColors.Background),
+        // Pull to refresh, the way the feed already works: the profile and whichever tab is
+        // open both ask the site again, so a count that moved on the site moves here too.
+        else -> PullToRefreshBox(
+            isRefreshing = listLoading || loading,
+            onRefresh = {
+                vm.load(name, force = true)
+                when (tab) {
+                    "comments" -> vm.loadComments(name, force = true)
+                    "wall" -> Unit
+                    else -> vm.loadPosts(name, force = true)
+                }
+            },
+            modifier = Modifier.fillMaxSize().background(DeliColors.Background),
+        ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 14.dp,
                 end = 14.dp,
@@ -528,10 +562,14 @@ fun ProfileScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.clickable(enabled = comment.postHref != null) {
-                                            comment.postHref?.let(onOpenPost)
+                                            comment.postHref?.let { onOpenPostAtComment(it, comment.id) }
                                         },
                                     )
                                     Spacer(Modifier.weight(1f))
+                                    // The score the site gave the comment, so a row here says
+                                    // as much as the same comment on the post page does.
+                                    MutedText("▲ ${comment.score}")
+                                    Spacer(Modifier.width(8.dp))
                                     MutedText(comment.ago)
                                 }
                                 Spacer(Modifier.height(6.dp))
@@ -548,6 +586,7 @@ fun ProfileScreen(
                     }
                 }
             }
+        }
         }
     }
 }

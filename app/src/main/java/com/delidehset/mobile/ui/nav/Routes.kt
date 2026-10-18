@@ -74,7 +74,15 @@ object Routes {
      * Permalinks are already URL-safe slugs, so they are passed through verbatim.
      * Encoding them here would double-encode once Navigation decodes the argument.
      */
-    fun post(permalink: String) = "$POST?permalink=$permalink"
+    /**
+     * A post, optionally with the comment to land on.
+     *
+     * A profile's comment row points at a comment, not at a post, and a thread of sixty
+     * comments is no answer to "show me what I wrote" — so the comment travels in the route
+     * and the post screen scrolls to it.
+     */
+    fun post(permalink: String, comment: String? = null) =
+        "$POST?permalink=$permalink" + (comment?.takeIf { it.isNotBlank() }?.let { "&comment=$it" } ?: "")
     fun user(name: String) = "$USER?name=$name"
     fun page(kind: String) = "$PAGE?kind=$kind"
 

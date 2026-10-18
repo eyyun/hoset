@@ -75,10 +75,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.delidehset.mobile.AppContainer
-import com.delidehset.mobile.data.ChatBridge
 import com.delidehset.mobile.data.ChatMessage
-import com.delidehset.mobile.data.ChatState
 import com.delidehset.mobile.data.VoiceState
 import com.delidehset.mobile.data.VoiceUser
 import com.delidehset.mobile.ui.CallAudio
@@ -111,30 +110,25 @@ fun ChatScreen(
     onOpenUser: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
-    var chat by remember { mutableStateOf(ChatState.Empty) }
-    var status by remember { mutableStateOf("Bağlanıyor…") }
+    // The room belongs to the app, not to this screen: leaving Sohbet no longer tears the
+    // socket down, so coming back shows the conversation at once instead of an empty room
+    // that fills in over the next few seconds. `container.chat` is where that lives.
+    val session = remember { container.chat }
+    val room by session.state.collectAsStateWithLifecycle()
+    val status by session.status.collectAsStateWithLifecycle()
+    val chat = room
     var voiceOpen by remember { mutableStateOf(false) }
     var micDenied by remember { mutableStateOf(false) }
 
-    val bridge = remember {
-        ChatBridge(
-            context = context,
-            http = container.http,
-            cookies = container.cookies,
-            viewerName = viewerName,
-            onState = { chat = it },
-            onStatus = { status = it },
-        )
-    }
-    val transport = remember { bridge.createWebView() }
+    val transport = remember { session.start(viewerName) }
 
     // Tell the room which account this is, twice: the frame is usually still loading when
     // this screen opens, and the call reports its participants by name.
     LaunchedEffect(viewerName) {
         if (viewerName.isNullOrBlank()) return@LaunchedEffect
-        bridge.hello(transport, viewerName)
+        session.hello(viewerName)
         delay(2500)
-        bridge.hello(transport, viewerName)
+        session.hello(viewerName)
     }
 
     // The call's audio path: communication mode is what turns the platform's echo canceller
@@ -145,14 +139,15 @@ fun ChatScreen(
     }
 
     DisposableEffect(Unit) {
-        transport.onResume()
-        transport.resumeTimers()
+        session.onShown()
         onDispose {
-            // Leaving the screen ends the call: a hot microphone behind a closed screen
-            // would be the worst possible surprise.
-            if (chat.voice.joined) bridge.voice(transport, join = false)
+            // Leaving the screen ends the call — a hot microphone behind a closed screen
+            // would be the worst possible surprise — but not the room: the socket stays up
+            // so the next visit is instant. The app closing is what ends it (see
+            // MainActivity.onStop).
+            if (session.state.value.voice.joined) session.voice(join = false)
             CallAudio.leave(context)
-            bridge.release(transport)
+            session.onHidden()
         }
     }
 
@@ -163,7 +158,7 @@ fun ChatScreen(
     ) { granted ->
         if (granted) {
             micDenied = false
-            bridge.voice(transport, join = true)
+            session.voice(join = true)
         } else {
             micDenied = true
         }
@@ -175,7 +170,7 @@ fun ChatScreen(
         android.util.Log.d("DeliChat", "joinVoice: micPermission=$granted")
         if (granted) {
             micDenied = false
-            bridge.voice(transport, join = true)
+            session.voice(join = true)
         } else {
             askMic.launch(android.Manifest.permission.RECORD_AUDIO)
         }
@@ -260,7 +255,14 @@ fun ChatScreen(
     ) {
         // The transport itself: never visible, never touched by the user.
         Box(Modifier.height(1.dp).fillMaxWidth()) {
-            AndroidView(modifier = Modifier.size(1.dp), factory = { transport })
+            // The WebView outlives this screen, so it is detached when the composition
+            // goes away: a view cannot be added to a second parent, and this one is handed
+            // to a fresh AndroidView every time the screen is opened again.
+            AndroidView(
+                modifier = Modifier.size(1.dp),
+                factory = { transport },
+                onRelease = { view -> (view.parent as? android.view.ViewGroup)?.removeView(view) },
+            )
         }
 
         RoomHeader(
@@ -270,8 +272,8 @@ fun ChatScreen(
             voice = chat.voice,
             onJoinVoice = { joinVoice() },
             onOpenVoicePanel = { voiceOpen = !voiceOpen },
-            onToggleMic = { bridge.voice(transport, mic = !chat.voice.muted) },
-            onLeaveVoice = { bridge.voice(transport, join = false) },
+            onToggleMic = { session.voice(mic = !chat.voice.muted) },
+            onLeaveVoice = { session.voice(join = false) },
         )
 
         AnimatedVisibility(
@@ -288,7 +290,7 @@ fun ChatScreen(
                 micDenied = micDenied,
                 speakerOn = speakerOn,
                 onJoin = { joinVoice() },
-                onToggleDeafen = { bridge.voice(transport, deafen = !chat.voice.deafened) },
+                onToggleDeafen = { session.voice(deafen = !chat.voice.deafened) },
                 onToggleSpeaker = {
                     speakerOn = !speakerOn
                     CallAudio.setSpeaker(context, speakerOn)
@@ -383,7 +385,7 @@ fun ChatScreen(
             onSend = {
                 val text = draft
                 draft = ""
-                bridge.send(transport, text)
+                session.send(text)
             },
             bottomInset = if (imeBottom > 0) 0.dp else contentPadding.calculateBottomPadding(),
         )

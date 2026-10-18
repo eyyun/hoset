@@ -11,10 +11,12 @@ import com.delidehset.mobile.data.UpdateException
 import com.delidehset.mobile.data.UpdateInfo
 import com.delidehset.mobile.data.decideUpdate
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -120,40 +122,49 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
 
         viewModelScope.launch {
             val target = File(appContext.cacheDir, "updates/hoset-${info.version}.apk")
-            runCatching {
+            val downloaded = runCatching {
                 UpdateChecker.download(info, target, currentVersion) { progress ->
                     _state.value = UpdateState.Downloading(info, progress)
                 }
-            }.fold(
-                onSuccess = { apk ->
+            }
+
+            val apk = downloaded.getOrNull()
+            if (apk == null) {
+                target.delete()
+                val error = downloaded.exceptionOrNull()
+                _state.value = UpdateState.Failed(
+                    if (error is UpdateException && error.message == "checksum") {
+                        "İndirilen dosya doğrulanamadı."
+                    } else {
+                        "Güncelleme indirilemedi."
+                    }
+                )
+                return@launch
+            }
+
+            // Reading the APK's signature and copying it into an installer session are both
+            // slow (Android parses the whole package twice) — and this coroutine runs on the
+            // main thread, so doing them here froze the screen for the length of the
+            // install, with no spinner to say anything was happening. The work moved to IO;
+            // only the state, which Compose reads, is written back here.
+            val launched = withContext(Dispatchers.IO) {
+                runCatching {
                     val installer = ApkInstaller(appContext)
-                    val launched = runCatching {
-                        // Asked before the installer is handed anything: a different signing
-                        // key is the one refusal Android describes as a package conflict,
-                        // and it is worth saying so in words instead of showing that error.
-                        if (installer.signingKeyDiffers(apk)) throw UpdateException("signature")
-                        installer.install(apk)
-                    }
-                    _state.value = when {
-                        launched.isSuccess -> UpdateState.Ready(info)
-                        (launched.exceptionOrNull() as? UpdateException)?.message == "signature" ->
-                            UpdateState.Failed(
-                                "Kurulu uygulama başka bir anahtarla imzalanmış; Android bu güncellemeyi üstüne yazamaz. Bir kez kaldırıp yeni sürümü kurunca sonrası kendiliğinden gelir."
-                            )
-                        else -> UpdateState.Failed("Güncelleme kurulamadı.")
-                    }
-                },
-                onFailure = { error ->
-                    target.delete()
-                    _state.value = UpdateState.Failed(
-                        if (error is UpdateException && error.message == "checksum") {
-                            "İndirilen dosya doğrulanamadı."
-                        } else {
-                            "Güncelleme indirilemedi."
-                        }
+                    // Asked before the installer is handed anything: a different signing
+                    // key is the one refusal Android describes as a package conflict,
+                    // and it is worth saying so in words instead of showing that error.
+                    if (installer.signingKeyDiffers(apk)) throw UpdateException("signature")
+                    installer.install(apk)
+                }
+            }
+            _state.value = when {
+                launched.isSuccess -> UpdateState.Ready(info)
+                (launched.exceptionOrNull() as? UpdateException)?.message == "signature" ->
+                    UpdateState.Failed(
+                        "Kurulu uygulama başka bir anahtarla imzalanmış; Android bu güncellemeyi üstüne yazamaz. Bir kez kaldırıp yeni sürümü kurunca sonrası kendiliğinden gelir."
                     )
-                },
-            )
+                else -> UpdateState.Failed("Güncelleme kurulamadı.")
+            }
         }
     }
 

@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -208,6 +210,7 @@ private fun pageTitleFor(kind: String): String = when (kind) {
 /*  Users                                                              */
 /* ------------------------------------------------------------------ */
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsersScreen(
     contentPadding: PaddingValues,
@@ -221,8 +224,15 @@ fun UsersScreen(
         state.loading -> LoadingBox(Modifier.fillMaxSize())
         state.error != null -> ErrorBox(state.error!!, Modifier.fillMaxSize(), onRetry = { vm.load(true) })
         state.items.isEmpty() -> EmptyBox("Kullanıcı yok.", Modifier.fillMaxSize())
-        else -> LazyColumn(
+        // Pull to refresh, like the feed and the profile: the table is read again instead of
+        // only once when the screen was first opened.
+        else -> PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = { vm.load(true) },
             modifier = Modifier.fillMaxSize().background(DeliColors.Background),
+        ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 12.dp,
                 end = 12.dp,
@@ -242,6 +252,7 @@ fun UsersScreen(
             items(state.items) { user: SiteUser ->
                 SiteUserRow(user = user, onOpenUser = onOpenUser)
             }
+        }
         }
     }
 }

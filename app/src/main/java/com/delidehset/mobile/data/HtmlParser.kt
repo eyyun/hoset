@@ -257,13 +257,24 @@ object HtmlParser {
             val cells = row.select("td")
             if (cells.size < 3) return@mapNotNull null
             val link = cells[1].selectFirst("a[href^=/h/]") ?: row.selectFirst("a[href^=/h/]") ?: return@mapNotNull null
+            val texts = cells.map { it.text().trim() }
+            // The columns are not read by position any more. "0 posts" on every community
+            // was what reading the third cell blind produced: the counting column is not
+            // always third, and its number is written the way the site writes numbers
+            // ("1.2k"), which `toIntOrNull` turns into nothing at all.
+            val dateCell = texts.firstOrNull { DATE.containsMatchIn(it) }
+            val postsCell = texts.firstOrNull { it.contains("gönderi", true) || it.contains("post", true) }
+                ?: texts.filterNot { it == dateCell }.firstOrNull { countOf(it) != null }
             Hole(
                 name = link.text().removePrefix("/h/").trim(),
                 href = link.attr("href"),
-                postCount = cells.getOrNull(2)?.text()?.trim()?.toIntOrNull() ?: 0,
-                createdOn = cells.getOrNull(3)?.text()?.trim(),
-                stealth = cells.getOrNull(4)?.text()?.trim(),
-                publicUse = cells.getOrNull(5)?.text()?.trim(),
+                postCount = countOf(postsCell)?.toIntOrNull() ?: 0,
+                createdOn = dateCell ?: texts.getOrNull(3),
+                stealth = texts.getOrNull(4),
+                publicUse = texts.getOrNull(5),
+                // The list draws the community's picture beside its name; post cards have
+                // carried the same logo all along, the table just never read it.
+                logo = row.selectFirst("img[src]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() },
             )
         }
     }
@@ -274,16 +285,24 @@ object HtmlParser {
             ?: doc.selectFirst(".feed-head-name[href^=/h/]")
             ?: return null
         val name = link.text().removePrefix("/h/").trim().ifBlank { return null }
+        // The header of a community page counts its posts too; it used to be recorded as a
+        // flat zero, which is why opening /h/general showed an empty community.
+        val counted = doc.selectFirst("#hole--posts, #hole-posts, .hole-post-count")
+            ?.text()
+            ?: doc.select("#main-content-col .text-muted").firstOrNull { it.text().contains("gönderi", true) }?.text()
         return Hole(
             name = name,
             href = link.attr("href"),
-            postCount = 0,
+            postCount = countOf(counted)?.toIntOrNull() ?: 0,
             createdOn = null,
             stealth = null,
             publicUse = null,
             description = doc.selectFirst(".hole-description, #main-content-col .text-muted")?.text()?.trim(),
         )
     }
+
+    /** `17 Eki 2026` / `29 September 2026`: the row's date, so it is not read as a count. */
+    private val DATE = Regex("\\d{1,2}\\s+\\p{L}+\\s+\\d{4}")
 
     /**
      * A count as the site prints it: `1`, `1,234`, `12.3k`, `1.2K`, `1.4m`.
@@ -708,12 +727,19 @@ object HtmlParser {
             // shows the link only when the label is worth reading.
             val label = postLink?.text()?.trim()
                 ?.takeIf { it.isNotBlank() && !it.startsWith("post ", ignoreCase = true) }
+            // The card's own score sits beside the vote arrows. The site has moved that
+            // markup around before, so several shapes are accepted and a row without any of
+            // them simply shows no score instead of a wrong zero.
+            val score = countOf(
+                card.selectFirst(".comment-score, .vote-score, .score, [data-score]")?.text()
+            )?.toIntOrNull()
             UserComment(
                 id = id,
                 ago = meta?.selectFirst("span.text-muted")?.text()?.trim().orEmpty(),
                 postHref = postLink?.attr("href")?.takeIf { it.isNotBlank() },
                 postLabel = label,
                 bodyHtml = body,
+                score = score ?: 0,
             )
         }
     }

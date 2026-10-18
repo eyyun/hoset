@@ -1,5 +1,7 @@
 package com.delidehset.mobile.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -320,8 +323,15 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 
 /**
  * The up/down arrow pair plus score, exactly like the `.feed-actions` row on a card.
- * When the viewer cannot vote the arrows are dimmed instead of hidden, matching the
- * way the site links the arrows to /signup for guests.
+ *
+ * A vote the viewer has cast is drawn as a *filled* circle behind that arrow, not just a
+ * different tint. The tint alone made an upvote read as "yellow, so it worked" while a
+ * downvote — teal on the site's palette, only a shade away from the muted grey of an
+ * unvoted arrow — looked like nothing had happened at all. The score follows the vote and
+ * carries the same colour, so the row says which way it was cast even at a glance.
+ *
+ * When the viewer cannot vote the arrows are dimmed instead of hidden, matching the way
+ * the site links the arrows to /signup for guests.
  */
 @Composable
 fun VoteArrows(
@@ -333,17 +343,12 @@ fun VoteArrows(
 ) {
     val size = if (compact) 20.dp else 26.dp
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = Icons.Filled.KeyboardArrowUp,
-            contentDescription = "Upvote",
-            tint = when {
-                viewerVote > 0 -> DeliColors.Upvote
-                canVote -> DeliColors.OnSurfaceVariant
-                else -> DeliColors.Border
-            },
-            modifier = Modifier
-                .size(size)
-                .then(if (canVote) Modifier.clickable { onVote(if (viewerVote == 1) 0 else 1) } else Modifier),
+        VoteArrow(
+            up = true,
+            active = viewerVote > 0,
+            canVote = canVote,
+            size = size,
+            onClick = { onVote(if (viewerVote == 1) 0 else 1) },
         )
         Text(
             text = score?.toString() ?: "–",
@@ -356,17 +361,55 @@ fun VoteArrows(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
+        VoteArrow(
+            up = false,
+            active = viewerVote < 0,
+            canVote = canVote,
+            size = size,
+            onClick = { onVote(if (viewerVote == -1) 0 else -1) },
+        )
+    }
+}
+
+/** One arrow of [VoteArrows]: filled while it is the vote in force, dimmed without a session. */
+@Composable
+private fun VoteArrow(
+    up: Boolean,
+    active: Boolean,
+    canVote: Boolean,
+    size: Dp,
+    onClick: () -> Unit,
+) {
+    val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
+    // A short spring on the arrow that was just picked: the circle appears at once, and the
+    // arrow lands in it instead of the two simply swapping colour.
+    val scale by animateFloatAsState(
+        targetValue = if (active) 1f else 0.86f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 900f),
+        label = "vote-arrow",
+    )
+    Box(
+        modifier = Modifier
+            .size(size + 10.dp)
+            .clip(CircleShape)
+            .background(if (active) accent.copy(alpha = 0.22f) else Color.Transparent)
+            .then(if (canVote) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
-            imageVector = Icons.Filled.KeyboardArrowDown,
-            contentDescription = "Downvote",
+            imageVector = if (up) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (up) "Upvote" else "Downvote",
             tint = when {
-                viewerVote < 0 -> DeliColors.Downvote
+                active -> accent
                 canVote -> DeliColors.OnSurfaceVariant
                 else -> DeliColors.Border
             },
             modifier = Modifier
                 .size(size)
-                .then(if (canVote) Modifier.clickable { onVote(if (viewerVote == -1) 0 else -1) } else Modifier),
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
         )
     }
 }
