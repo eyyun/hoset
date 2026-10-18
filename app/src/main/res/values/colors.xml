@@ -14,4 +14,5 @@
 
     <!-- The launcher mark sits on the same white field it was drawn on. -->
     <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_cat_bg">#18C899</color>
 </resources>

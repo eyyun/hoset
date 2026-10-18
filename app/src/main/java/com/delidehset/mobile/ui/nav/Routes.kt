@@ -132,6 +132,7 @@ val drawerSections: List<DrawerSection> = listOf(
             DrawerItem("Topluluklar", Routes.HOLES, Icons.Filled.Groups),
             DrawerItem("Sohbet", Routes.page("chat"), Icons.Filled.Forum, signedInOnly = true),
             DrawerItem("Effortpostlar", Routes.FEED_EFFORT, Icons.Filled.Verified),
+            DrawerItem("Rastgele gönderi", "random?kind=post", Icons.Filled.Casino),
             DrawerItem("Gönderi oluştur", Routes.SUBMIT, Icons.Filled.Edit),
         ),
     ),
@@ -139,9 +140,11 @@ val drawerSections: List<DrawerSection> = listOf(
         title = "Topluluk & İstatistik",
         items = listOf(
             DrawerItem("Kullanıcılar", Routes.page("users"), Icons.Filled.Person),
-            DrawerItem("Rozetler", Routes.page("badges"), Icons.Filled.Hexagon),
+            // Hidden from sidebar for now: /badges has 0 items, /transfers is 404, and /stats is unported on the site.
+            // DrawerItem("Rozetler", Routes.page("badges"), Icons.Filled.Hexagon),
+            // DrawerItem("Transferler", Routes.page("transfers"), Icons.Filled.History),
             DrawerItem("Leaderboard", Routes.page("leaderboard"), Icons.Filled.EmojiEvents, signedInOnly = true),
-            DrawerItem("İstatistikler", Routes.page("stats"), Icons.Filled.QueryStats, signedInOnly = true),
+            // DrawerItem("İstatistikler", Routes.page("stats"), Icons.Filled.QueryStats, signedInOnly = true),
             // The rules belong with the community things, not buried in About: a person
             // should be able to find them without opening settings first.
             DrawerItem("Kurallar", Routes.RULES, Icons.Filled.Shield),
@@ -150,9 +153,9 @@ val drawerSections: List<DrawerSection> = listOf(
     DrawerSection(
         title = "Yönetim & Destek",
         items = listOf(
-            DrawerItem("Yönetim paneli", Routes.page("admin"), Icons.Filled.AdminPanelSettings, signedInOnly = true, adminOnly = true),
+            // DrawerItem("Yönetim paneli", Routes.page("admin"), Icons.Filled.AdminPanelSettings, signedInOnly = true, adminOnly = true),
             DrawerItem("Yöneticiler", Routes.page("admins"), Icons.Filled.AdminPanelSettings),
-            DrawerItem("Moderasyon kaydı", Routes.page("comments"), Icons.Filled.History),
+            // DrawerItem("Moderasyon kaydı", Routes.page("comments"), Icons.Filled.History),
             DrawerItem("Bize ulaşın", Routes.CONTACT, Icons.Filled.ContactMail),
             DrawerItem("Tema Mağazası", Routes.THEMES, Icons.Filled.Palette),
             DrawerItem("Ayarlar", Routes.SETTINGS, Icons.Filled.Settings),

@@ -2,6 +2,7 @@ package com.delidehset.mobile.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,9 +85,18 @@ fun PostScreen(
     var replyText by remember { mutableStateOf("") }
     var showReport by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
+    var zoomedImage by remember { mutableStateOf<String?>(null) }
+    var collapsedIds by remember { mutableStateOf(setOf<String>()) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val copyLongPress = com.delidehset.mobile.data.HosetPrefs.copyOnLongPressState.value
+    val showDownload = com.delidehset.mobile.data.HosetPrefs.mediaDownloadState.value
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-    LaunchedEffect(permalink) { vm.load(permalink) }
+    LaunchedEffect(permalink) {
+        com.delidehset.mobile.data.HosetPrefs.markPostSeen(context, permalink)
+        vm.load(permalink)
+    }
     LaunchedEffect(canVote) { vm.setVoting(canVote) }
     LaunchedEffect(state.message) {
         state.message?.let { onMessage(it); vm.consumeMessage() }
@@ -96,8 +106,8 @@ fun PostScreen(
     // caught up with it yet. Without the second part the app looked as if the comment
     // had gone nowhere: it is added at the end of a long thread, far below the box the
     // person had just typed into.
-    val flatComments = remember(state.comments, state.posted) {
-        val real = flatten(state.comments)
+    val flatComments = remember(state.comments, state.posted, collapsedIds) {
+        val real = flatten(state.comments, collapsedIds)
         val pending = state.posted
         if (pending == null || real.any { it.first.id == pending.id }) real
         else if (pending.parentId == null) real + (pending to 0)
@@ -164,7 +174,16 @@ fun PostScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             post.hole?.let {
-                                DeliChip("/h/$it", onClick = { onOpenHole(it) }, accent = true)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { onOpenHole(it) },
+                                ) {
+                                    HoleLogo(url = null, name = it, size = 22.dp)
+                                    Spacer(Modifier.width(6.dp))
+                                    val label = com.delidehset.mobile.data.HoleStore.cachedLabel(it)
+                                        ?.let { l -> "$l · /h/$it" } ?: "/h/$it"
+                                    DeliChip(label, onClick = { onOpenHole(it) }, accent = true)
+                                }
                                 Spacer(Modifier.width(8.dp))
                             }
                             post.flair?.let { DeliChip(it) }
@@ -204,13 +223,37 @@ fun PostScreen(
                             AsyncImage(
                                 model = img,
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxWidth().clip(DeliShapes.control),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(DeliShapes.control)
+                                    .clickable { zoomedImage = img },
                                 contentScale = ContentScale.FillWidth,
                             )
                         }
                         for (video in rendered.videos) {
                             Spacer(Modifier.height(8.dp))
                             DeliVideoPlayer(url = video)
+                            if (com.delidehset.mobile.data.HosetPrefs.mediaDownloadState.value) {
+                                val vCtx = androidx.compose.ui.platform.LocalContext.current
+                                Spacer(Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .clip(DeliShapes.small)
+                                        .background(DeliColors.SurfaceVariant)
+                                        .clickable {
+                                            val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(vCtx, video)
+                                            android.widget.Toast.makeText(
+                                                vCtx,
+                                                if (ok) com.delidehset.mobile.ui.tr("İndirme başlatıldı.") else com.delidehset.mobile.ui.tr("İndirilemedi."),
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(com.delidehset.mobile.ui.t("İndir"), color = DeliColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
                         }
                     }
                 }
@@ -316,10 +359,12 @@ fun PostScreen(
                     item { EmptyBox("Henüz yorum yok. İlk yorumu sen yaz.") }
                 } else {
                     items(flatComments, key = { it.first.id }) { (comment, depth) ->
+                        val collapsed = comment.id in collapsedIds
                         Column {
                             CommentRow(
                                 comment = comment,
                                 depth = depth,
+                                collapsed = collapsed,
                                 highlighted = lit != null && comment.id == lit,
                                 viewerVote = state.commentVotes[comment.id] ?: comment.viewerVote,
                                 canVote = canVote,
@@ -328,12 +373,20 @@ fun PostScreen(
                                     replyText = ""
                                     vm.startReply(comment)
                                 },
+                                onToggleCollapse = {
+                                    collapsedIds = if (collapsed) collapsedIds - comment.id else collapsedIds + comment.id
+                                },
+                                onCopy = { text ->
+                                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                                    onMessage(com.delidehset.mobile.ui.tr("Yorum kopyalandı."))
+                                },
+                                onOpenImage = { zoomedImage = it },
                                 onOpenUser = onOpenUser,
                             )
                             // The answer is written where it will appear: directly under
                             // the comment it answers, not in the box at the top of the
                             // thread where it could be mistaken for a new comment.
-                            if (state.replyTo?.id == comment.id) {
+                            if (!collapsed && state.replyTo?.id == comment.id) {
                                 InlineReplyBox(
                                     name = comment.authorName ?: "?",
                                     text = replyText,
@@ -352,6 +405,49 @@ fun PostScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    zoomedImage?.let { imgUrl ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { zoomedImage = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { zoomedImage = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = imgUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                if (showDownload) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(24.dp)
+                            .clip(DeliShapes.control)
+                            .background(DeliColors.Primary)
+                            .clickable {
+                                val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
+                                onMessage(com.delidehset.mobile.ui.tr(if (ok) "İndirme başlatıldı." else "İndirilemedi."))
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = com.delidehset.mobile.ui.t("İndir"),
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }
@@ -413,16 +509,21 @@ private fun siteColor(raw: String?): Color? {
     return Color(if (hex.length == 6) value or 0xFF000000L else value)
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
     comment: CommentNode,
     depth: Int,
+    collapsed: Boolean = false,
     /** The comment the screen was opened for: its card is outlined until the moment passes. */
     highlighted: Boolean = false,
     viewerVote: Int,
     canVote: Boolean,
     onVote: (Int) -> Unit,
     onReply: () -> Unit,
+    onToggleCollapse: () -> Unit = {},
+    onCopy: (String) -> Unit = {},
+    onOpenImage: (String) -> Unit = {},
     onOpenUser: (String) -> Unit,
 ) {
     val rendered = remember(comment.bodyHtml) { DeliHtml.render(comment.bodyHtml) }
@@ -436,6 +537,10 @@ private fun CommentRow(
                 else Modifier
             )
             .background(if (highlighted) DeliColors.Primary.copy(alpha = 0.12f) else DeliColors.Surface)
+            .combinedClickable(
+                onClick = { if (collapsed) onToggleCollapse() },
+                onLongClick = { onCopy(rendered.text.text) },
+            )
             .padding(10.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -457,40 +562,56 @@ private fun CommentRow(
                     modifier = Modifier.clickable { comment.authorName?.let(onOpenUser) },
                 )
                 comment.ago?.let { MutedText("  ·  $it") }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = rendered.text,
-                color = if (comment.isDeleted) DeliColors.OnSurfaceVariant else DeliColors.OnBackground,
-                fontSize = 14.sp,
-            )
-            for (img in rendered.images) {
-                Spacer(Modifier.height(6.dp))
-                AsyncImage(
-                    model = img,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().clip(DeliShapes.small),
-                    contentScale = ContentScale.FillWidth,
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                VoteArrows(
-                    score = comment.score,
-                    viewerVote = viewerVote,
-                    canVote = canVote,
-                    onVote = onVote,
-                    compact = true,
-                )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.weight(1f))
                 Text(
-                    "Yanıtla",
+                    text = if (collapsed) "[+${1 + comment.children.size}]" else "[−]",
                     color = DeliColors.OnSurfaceVariant,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clickable { onReply() },
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(DeliShapes.small)
+                        .clickable { onToggleCollapse() }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
+            }
+            if (!collapsed) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = rendered.text,
+                    color = if (comment.isDeleted) DeliColors.OnSurfaceVariant else DeliColors.OnBackground,
+                    fontSize = 14.sp,
+                )
+                for (img in rendered.images) {
+                    Spacer(Modifier.height(6.dp))
+                    AsyncImage(
+                        model = img,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(DeliShapes.small)
+                            .clickable { onOpenImage(img) },
+                        contentScale = ContentScale.FillWidth,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    VoteArrows(
+                        score = comment.score,
+                        viewerVote = viewerVote,
+                        canVote = canVote,
+                        onVote = onVote,
+                        compact = true,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Yanıtla",
+                        color = DeliColors.OnSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { onReply() },
+                    )
+                }
             }
         }
     }
@@ -581,12 +702,17 @@ private fun InlineReplyBox(
 }
 
 /** Depth-first flattening so comments can live in a plain LazyColumn. */
-private fun flatten(nodes: List<CommentNode>): List<Pair<CommentNode, Int>> {
+private fun flatten(
+    nodes: List<CommentNode>,
+    collapsedIds: Set<String> = emptySet(),
+): List<Pair<CommentNode, Int>> {
     val out = mutableListOf<Pair<CommentNode, Int>>()
     fun walk(list: List<CommentNode>, depth: Int) {
         for (n in list) {
             out += n to depth
-            walk(n.children, depth + 1)
+            if (n.id !in collapsedIds) {
+                walk(n.children, depth + 1)
+            }
         }
     }
     walk(nodes, 0)

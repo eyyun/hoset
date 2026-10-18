@@ -13,6 +13,7 @@ import com.delidehset.mobile.data.FeedSort
 import com.delidehset.mobile.data.Hole
 import com.delidehset.mobile.data.HoleAccess
 import com.delidehset.mobile.data.HoleSettings
+import com.delidehset.mobile.data.HoleStore
 import com.delidehset.mobile.data.LangStore
 import com.delidehset.mobile.data.LoginResult
 import com.delidehset.mobile.data.NotificationPage
@@ -157,6 +158,9 @@ class AppViewModel(
                 // pages it is reading from. Signed out there is nothing to read — and the
                 // settings page is already warm by now, so this costs no request of its own.
                 if (_viewer.value.isSignedIn) {
+                    _viewer.value.username?.takeIf { it.isNotBlank() }?.let { me ->
+                        runCatching { repo.profile(me) }
+                    }
                     val accountLanguage = runCatching { repo.accountLanguage() }.getOrNull()
                     if (!accountLanguage.isNullOrBlank()) langStore.save(accountLanguage)
                 }
@@ -222,6 +226,14 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _holeCanManage = MutableStateFlow(false)
     val holeCanManage: StateFlow<Boolean> = _holeCanManage.asStateFlow()
 
+    /** The community's own picture, off its page's sidebar; null when it has none. */
+    private val _holeLogo = MutableStateFlow<String?>(null)
+    val holeLogo: StateFlow<String?> = _holeLogo.asStateFlow()
+
+    /** The community's human-readable title off its page sidebar. */
+    private val _holeDisplayName = MutableStateFlow<String?>(null)
+    val holeDisplayName: StateFlow<String?> = _holeDisplayName.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -233,6 +245,8 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
         _holeFollowing.value = null
         _holeBlocked.value = null
         _holeCanManage.value = false
+        _holeLogo.value = hole?.let { HoleStore.cachedLogo(it) }
+        _holeDisplayName.value = hole?.let { HoleStore.cachedLabel(it) }
         _state.value = FeedUiState(sort = sort, hole = hole, effortOnly = effortOnly)
         if (hole == null) {
             // Cache first: opening a feed you already visited renders immediately.
@@ -276,6 +290,8 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
                     state.joined?.let { _holeFollowing.value = it }
                     state.blocked?.let { _holeBlocked.value = it }
                     _holeCanManage.value = state.canManage
+                    _holeLogo.value = state.logo ?: HoleStore.cachedLogo(hole)
+                    _holeDisplayName.value = state.displayName ?: HoleStore.cachedLabel(hole)
                 }
         }
     }
@@ -349,6 +365,10 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
                     force = force,
                 )
             }.onSuccess { res ->
+                if (!s.hole.isNullOrBlank()) {
+                    if (_holeLogo.value == null) _holeLogo.value = HoleStore.cachedLogo(s.hole)
+                    if (_holeDisplayName.value == null) _holeDisplayName.value = HoleStore.cachedLabel(s.hole)
+                }
                 _state.update { prev ->
                     prev.copy(
                         posts = if (reset) res.posts else prev.posts + res.posts,
@@ -642,7 +662,13 @@ data class ListUiState<T>(
 class HolesViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _state = MutableStateFlow(ListUiState<Hole>())
     val state: StateFlow<ListUiState<Hole>> = _state.asStateFlow()
+    private val _creating = MutableStateFlow(false)
+    val creating: StateFlow<Boolean> = _creating.asStateFlow()
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
     private var loaded = false
+
+    fun consumeMessage() { _message.value = null }
 
     fun load(force: Boolean = false) {
         if (loaded && !force) return
@@ -657,15 +683,47 @@ class HolesViewModel(private val repo: DeliRepository) : ViewModel() {
                     // instead, and each row is corrected as its own number arrives.
                     val names = holes.map { it.name }
                     val counted = runCatching { repo.holePostCounts(names) }.getOrNull().orEmpty()
-                    if (counted.isNotEmpty()) {
-                        _state.value = _state.value.copy(
-                            items = _state.value.items.map { hole ->
-                                counted[hole.name]?.let { hole.copy(postCount = it) } ?: hole
-                            }
-                        )
-                    }
+                    _state.value = _state.value.copy(
+                        items = _state.value.items.map { hole ->
+                            hole.copy(
+                                postCount = counted[hole.name] ?: hole.postCount,
+                                logo = hole.logo ?: HoleStore.cachedLogo(hole.name),
+                                displayName = hole.displayName ?: HoleStore.cachedLabel(hole.name),
+                            )
+                        }
+                    )
                 }
                 .onFailure { _state.value = ListUiState(loading = false, error = DeliErrors.explain(it)) }
+        }
+    }
+
+    fun createHole(
+        name: String,
+        displayName: String = "",
+        shortDescription: String = "",
+        onCreated: (String) -> Unit = {},
+    ) {
+        val cleanName = name.trim().removePrefix("/h/").removePrefix("h/")
+        if (cleanName.length < 3 || _creating.value) return
+        _creating.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.createHole(cleanName, displayName, shortDescription) }
+                .onSuccess { res ->
+                    _creating.value = false
+                    if (res.ok) {
+                        _message.value = tr("Topluluk oluşturuldu.")
+                        load(force = true)
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            onCreated(cleanName)
+                        }
+                    } else {
+                        _message.value = res.message ?: tr("Topluluk oluşturulamadı.")
+                    }
+                }
+                .onFailure { e ->
+                    _creating.value = false
+                    _message.value = DeliErrors.explain(e)
+                }
         }
     }
 }
@@ -879,23 +937,29 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
 
     /** Loads `/@name/posts` once; a second visit uses what the first one brought. */
     fun loadPosts(name: String, force: Boolean = false) {
-        if (!force && _posts.value.containsKey(name)) return
-        _listLoading.value = true
+        val cached = _posts.value[name] ?: repo.cachedUserPosts(name)?.also { list ->
+            _posts.update { it + (name to list) }
+        }
+        if (!force && cached != null) return
+        if (cached == null) _listLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.userPosts(name, force) }
                 .onSuccess { list -> _posts.update { it + (name to list) } }
-                .onFailure { e -> _message.value = DeliErrors.explain(e) }
+                .onFailure { e -> if (cached == null) _message.value = DeliErrors.explain(e) }
             _listLoading.value = false
         }
     }
 
     fun loadComments(name: String, force: Boolean = false) {
-        if (!force && _comments.value.containsKey(name)) return
-        _listLoading.value = true
+        val cached = _comments.value[name] ?: repo.cachedUserComments(name)?.also { list ->
+            _comments.update { it + (name to list) }
+        }
+        if (!force && cached != null) return
+        if (cached == null) _listLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.userComments(name, force) }
                 .onSuccess { list -> _comments.update { it + (name to list) } }
-                .onFailure { e -> _message.value = DeliErrors.explain(e) }
+                .onFailure { e -> if (cached == null) _message.value = DeliErrors.explain(e) }
             _listLoading.value = false
         }
     }
@@ -979,9 +1043,12 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
     }
 
     fun load(name: String, force: Boolean = false) {
-        if (loadedName == name && !force) return
+        val cached = _state.value[name] ?: repo.cachedProfile(name)?.also { profile ->
+            _state.update { m -> m + (name to profile) }
+        }
+        if (loadedName == name && !force && cached != null) return
         loadedName = name
-        _loading.value = true
+        _loading.value = cached == null
         _error.value = null
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.profile(name, force) }
@@ -989,7 +1056,10 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
                     _state.update { m -> m + (name to profile) }
                     _loading.value = false
                 }
-                .onFailure { e -> _error.value = DeliErrors.explain(e); _loading.value = false }
+                .onFailure { e ->
+                    if (cached == null) _error.value = DeliErrors.explain(e)
+                    _loading.value = false
+                }
         }
     }
 }

@@ -14,6 +14,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.delidehset.mobile.ui.tr
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
@@ -38,6 +39,15 @@ data class VoiceUser(
     val speaking: Boolean = false,
 )
 
+/** One online person in Sohbette or Sitede Çevrimiçi, with avatar and ping (rtt ms). */
+data class OnlineUser(
+    val name: String,
+    val avatarUrl: String? = null,
+    val color: String? = null,
+    val nameplate: String? = null,
+    val rtt: Int = -1,
+)
+
 /**
  * The voice channel as the room reports it. The call itself (capture, codec, playback)
  * runs in the room page inside the hidden WebView; this is only what the native panel
@@ -59,6 +69,8 @@ data class VoiceState(
 data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
     val online: List<String> = emptyList(),
+    val chatUsers: List<OnlineUser> = emptyList(),
+    val siteUsers: List<OnlineUser> = emptyList(),
     val typing: String = "",
     val voice: VoiceState = VoiceState.Empty,
 ) {
@@ -109,6 +121,10 @@ class ChatBridge(
         const val FRAME_PATH = "/chat/frame"
 
         const val FRAME_ID = "chat-frame"
+
+        /** How long the first load waits for the session cookies, 20 × 50 ms. */
+        const val COOKIE_WAIT_STEPS = 20
+        const val COOKIE_WAIT_MS = 50L
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -123,27 +139,22 @@ class ChatBridge(
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        // The room is the same page and the same 1 MB script every time it is opened; asking
-        // the network for them again on each visit is what made the screen arrive slowly and
-        // stutter while it caught up. The cache is preferred and the network is the fallback,
-        // so the first visit of a session still gets a fresh page.
-        settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+        // Never use LOAD_CACHE_ELSE_NETWORK here: both `/chat/1` and `/api/realtime/get_token`
+        // carry `Cache-Control: no-cache, no-store`, and an unauthenticated 302 redirect to
+        // `/login?ReturnUrl=%2Fchat%2F1` cached on disk will trap every subsequent visit on
+        // the login page even after cookies are in place. Clearing the disk cache once per
+        // transport creation also evicts any poisoned redirect left by an older build.
+        settings.cacheMode = WebSettings.LOAD_DEFAULT
+        clearCache(true)
         // The voice call plays remote audio without any tap on this page, so the room's
         // own playback must not be held behind the autoplay gesture requirement.
         settings.mediaPlaybackRequiresUserGesture = false
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
-        // Same session as the native client, so the room opens already signed in.
-        DeliHttp.BASE_URL.toHttpUrlOrNull()?.let { url ->
-            val header = cookies.exportRawHeader(url)
-            if (header.isNotBlank()) {
-                header.split("; ").forEach { pair ->
-                    CookieManager.getInstance().setCookie(DeliHttp.BASE_URL, "$pair; path=/")
-                }
-                CookieManager.getInstance().flush()
-            }
-        }
+        // Same session as the native client, so the room opens already signed in. Without
+        // this the room answers with the site's sign-in page instead of the socket.
+        pushSessionCookies()
 
         addJavascriptInterface(PageBridge(), "DeliChat")
 
@@ -162,6 +173,37 @@ class ChatBridge(
         }
 
         webViewClient = object : WebViewClient() {
+            /**
+             * The room is never read over plain http.
+             *
+             * The site's own sign-in redirect leaves https behind and points at
+             * `http://delidehset.com/login?...`; Android refuses cleartext by policy, so the
+             * WebView landed on a browser error page instead of the room — the socket was
+             * never opened, the room looked empty and nothing could be sent. Every navigation
+             * back to this host is put back on https.
+             */
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): Boolean {
+                val target = request?.url?.toString() ?: return false
+                if (target.startsWith("http://")) {
+                    view?.loadUrl("https://" + target.removePrefix("http://"))
+                    return true
+                }
+                return false
+            }
+
+            @Suppress("deprecation")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                val target = url ?: return false
+                if (target.startsWith("http://")) {
+                    view?.loadUrl("https://" + target.removePrefix("http://"))
+                    return true
+                }
+                return false
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest,
@@ -174,15 +216,87 @@ class ChatBridge(
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                if (url.orEmpty().contains(ROOM_PATH)) {
+                    view?.evaluateJavascript(parentWatcherJs(), null)
+                }
                 onStatus("Bağlanıyor…")
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                onStatus("Bağlı")
+                val landed = url.orEmpty()
+                if (landed.contains(ROOM_PATH) && landed.startsWith("https://")) {
+                    view?.evaluateJavascript(parentWatcherJs(), null)
+                }
+                // Anything can "finish loading" — a login page, or the browser's own error
+                // page. Only the room itself means the socket is up.
+                onStatus(
+                    when {
+                        landed.contains(ROOM_PATH) && landed.startsWith("https://") -> "Bağlı"
+                        landed.contains("/login") -> tr("Odaya giriş yapmalısın.")
+                        landed.startsWith("https://") -> "Bağlanıyor…"
+                        else -> tr("Odaya ulaşılamadı.")
+                    }
+                )
             }
         }
 
-        loadUrl(DeliHttp.BASE_URL + ROOM_PATH)
+        loadRoomOnceCookiesAreIn(webView = this, expected = pushedCookieNames())
+    }
+
+    /**
+     * The room is opened only after the session cookies are visible to the WebView.
+     *
+     * `CookieManager.setCookie` is asynchronous: called a moment before `loadUrl` it has
+     * been accepted but not yet handed to the network stack, so the very first request went
+     * out without the session — the site answered with its sign-in page, the socket was
+     * never opened, and the room stayed empty while nothing could be sent. The load waits
+     * for the store to actually report the cookies, with a short ceiling so an anonymous
+     * visit still opens the room instead of hanging.
+     */
+    private fun loadRoomOnceCookiesAreIn(webView: WebView, expected: List<String>) {
+        val manager = CookieManager.getInstance()
+        var waited = 0
+        val attempt = object : Runnable {
+            override fun run() {
+                val present = manager.getCookie(DeliHttp.BASE_URL).orEmpty()
+                val ready = expected.isEmpty() || expected.all { present.contains("$it=") }
+                if (ready || waited >= COOKIE_WAIT_STEPS) {
+                    android.util.Log.d("DeliChat", "room loading, cookies ready=$ready")
+                    webView.loadUrl(DeliHttp.BASE_URL + ROOM_PATH)
+                    return
+                }
+                waited++
+                webView.postDelayed(this, COOKIE_WAIT_MS)
+            }
+        }
+        webView.post(attempt)
+    }
+
+    /** The cookie names this session expects the room to be opened with. */
+    private fun pushedCookieNames(): List<String> =
+        runCatching { cookies.exportRawHeader(DeliHttp.BASE_URL.toHttpUrlOrNull() ?: return emptyList()) }
+            .getOrNull().orEmpty()
+            .split("; ")
+            .mapNotNull { it.substringBefore('=').takeIf { name -> name.isNotBlank() } }
+
+    /**
+     * Copies the app's own session into the WebView's cookie store.
+     *
+     * The two stores are separate: the app's requests go through OkHttp's jar, the room
+     * through Chromium's. A room whose store is empty is not refused — it is answered with
+     * the site's sign-in page, which looks exactly like "the chat is broken".
+     */
+    private fun pushSessionCookies() {
+        val url = DeliHttp.BASE_URL.toHttpUrlOrNull() ?: return
+        val manager = CookieManager.getInstance()
+        val header = runCatching { cookies.exportRawHeader(url) }.getOrNull().orEmpty()
+        if (header.isBlank()) return
+        manager.setAcceptCookie(true)
+        header.split("; ").filter { it.isNotBlank() }.forEach { pair ->
+            manager.setCookie(DeliHttp.BASE_URL, "$pair; path=/")
+        }
+        manager.flush()
+        android.util.Log.d("DeliChat", "room cookies set: ${header.split("; ").size}")
     }
 
     /**
@@ -253,7 +367,9 @@ class ChatBridge(
     }
 
     private fun postToFrame(webView: WebView?, payload: String) {
+        val parentGuard = parentWatcherJs()
         val js = """
+            $parentGuard
             (function () {
               var frame = document.getElementById('$FRAME_ID');
               if (!frame || !frame.contentWindow) return;
@@ -261,6 +377,254 @@ class ChatBridge(
             })();
         """.trimIndent()
         webView?.evaluateJavascript(js, null)
+    }
+
+    /**
+     * Runs in the outer `/chat/1` document, which is where `/js/chat.min.js` and
+     * `/js/g729.min.js` actually open the microphone, own the binary WebSocket, and
+     * decode incoming `VAUDIO`/`MAUDIO` frames.
+     *
+     * The site's own echo guard is broken because `chat.min.js` calls
+     * `G729.setOwnUserId(frame.dataset.userId)` with a UUID string, while incoming
+     * `VAUDIO` frames pass a numeric `Uint32` (the first 4 bytes of the sender's
+     * 16-byte binary GUID) to `G729.playFrame(uid, pcm)` — so `uid === ownUserId` is
+     * comparing a `number` to a `string` and never matches. Here we derive the numeric
+     * `Uint32` IDs from both `data-user-id` and the `USERS`/`VSTATE` packets and drop
+     * own frames before they ever reach the WebAudio player.
+     */
+    private fun parentWatcherJs(): String {
+        val meQuoted = JSONObject.quote(viewerName?.trim().orEmpty())
+        val ghost = HosetPrefs.ghostTypingState.value
+        val stealth = HosetPrefs.stealthOnlineState.value
+        return """
+            (function () {
+              var me = $meQuoted;
+              var ghost = $ghost;
+              var stealth = $stealth;
+              if (window.__deliParent && typeof window.__deliParent.setMe === 'function') {
+                if (me) window.__deliParent.setMe(me);
+                if (typeof window.__deliParent.setGhost === 'function') window.__deliParent.setGhost(ghost);
+                if (typeof window.__deliParent.setStealth === 'function') window.__deliParent.setStealth(stealth);
+                return;
+              }
+              var ownUids = {};
+              var primaryUid = 0;
+              var dropped = 0;
+              var deafened = false;
+
+              function norm(s) {
+                return String(s || '').replace(/^@/, '').trim().toLowerCase();
+              }
+
+              function addOwnUid(uid, source) {
+                var n = (typeof uid === 'number') ? (uid >>> 0) : 0;
+                if (!n) return;
+                var isNew = !ownUids[n];
+                ownUids[n] = true;
+                if (!primaryUid || source === 'users' || source === 'vstate' || source === 'frame') {
+                  primaryUid = n;
+                }
+                if (isNew) {
+                  try { DeliChat.log('parent-echo: learned own uid=' + n + ' via ' + source); } catch (e) {}
+                }
+                if (window.G729 && typeof window.G729.__deliSyncOwn === 'function') {
+                  try { window.G729.__deliSyncOwn(primaryUid); } catch (e) {}
+                }
+              }
+
+              function addGuidUids(guidStr, source) {
+                var clean = String(guidStr || '').replace(/-/g, '').trim().toLowerCase();
+                if (clean.length === 32 && !/[^0-9a-f]/.test(clean)) {
+                  var b0 = parseInt(clean.substr(0, 2), 16);
+                  var b1 = parseInt(clean.substr(2, 2), 16);
+                  var b2 = parseInt(clean.substr(4, 2), 16);
+                  var b3 = parseInt(clean.substr(6, 2), 16);
+                  // .NET Guid.ToByteArray() little-endian Data1 read as big-endian Uint32 (matches Realtime.guidToBytes)
+                  var netUid = (((b3 << 24) | (b2 << 16) | (b1 << 8) | b0) >>> 0);
+                  // Standard big-endian first 4 bytes
+                  var beUid = (((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) >>> 0);
+                  addOwnUid(netUid, source + ':net');
+                  addOwnUid(beUid, source + ':be');
+                } else {
+                  var num = parseInt(guidStr, 10);
+                  if (!isNaN(num) && num > 0) addOwnUid(num >>> 0, source + ':num');
+                }
+              }
+
+              function scanFrameAttr() {
+                try {
+                  var f = document.getElementById('$FRAME_ID');
+                  if (f && f.dataset && f.dataset.userId) {
+                    addGuidUids(f.dataset.userId, 'dataset');
+                  }
+                } catch (e) {}
+              }
+
+              function hardenParentMic() {
+                try {
+                  var md = navigator.mediaDevices;
+                  if (!md || typeof md.getUserMedia !== 'function' || md.__deliParentMic) return;
+                  var orig = md.getUserMedia.bind(md);
+                  md.getUserMedia = function (c) {
+                    try {
+                      var out = c || {};
+                      if (out.audio !== false) {
+                        var base = (out.audio && typeof out.audio === 'object') ? out.audio : {};
+                        var merged = {};
+                        for (var k in base) merged[k] = base[k];
+                        merged.echoCancellation = true;
+                        merged.noiseSuppression = true;
+                        merged.autoGainControl = true;
+                        merged.googEchoCancellation = true;
+                        merged.googEchoCancellation2 = true;
+                        merged.googNoiseSuppression = true;
+                        merged.googHighpassFilter = true;
+                        out.audio = merged;
+                      }
+                    } catch (x) {}
+                    return orig(out);
+                  };
+                  md.__deliParentMic = true;
+                  try { DeliChat.log('parent-echo: mic hardened'); } catch (e) {}
+                } catch (e) {}
+              }
+
+              function hookG729() {
+                var g = window.G729;
+                if (!g || g.__deliParentHooked) return;
+                try {
+                  var origSetOwn = typeof g.setOwnUserId === 'function' ? g.setOwnUserId.bind(g) : null;
+                  var origPlay = typeof g.playFrame === 'function' ? g.playFrame.bind(g) : null;
+                  var origMusic = typeof g.playMusicFrame === 'function' ? g.playMusicFrame.bind(g) : null;
+
+                  g.__deliSyncOwn = function (uid) {
+                    if (origSetOwn && uid > 0) origSetOwn(uid >>> 0);
+                  };
+
+                  if (origSetOwn) {
+                    g.setOwnUserId = function (id) {
+                      if (typeof id === 'number' && id > 0) {
+                        addOwnUid(id >>> 0, 'g729-num');
+                      } else if (typeof id === 'string' && id.length > 0) {
+                        addGuidUids(id, 'g729-str');
+                      }
+                      var target = primaryUid > 0 ? primaryUid : id;
+                      try { DeliChat.log('parent-echo: setOwnUserId(' + id + ') -> ' + target); } catch (e) {}
+                      return origSetOwn(target);
+                    };
+                  }
+
+                  if (origPlay) {
+                    g.playFrame = function (uid, pcm) {
+                      var u = (uid >>> 0);
+                      if (deafened || (u > 0 && ownUids[u])) {
+                        dropped++;
+                        if (dropped === 1 || dropped % 50 === 0) {
+                          try { DeliChat.log('parent-echo: dropped ' + dropped + ' own/deafened voice frame(s) for uid=' + u); } catch (e) {}
+                        }
+                        return false;
+                      }
+                      return origPlay(uid, pcm);
+                    };
+                  }
+
+                  if (origMusic) {
+                    g.playMusicFrame = function (uid, pcm) {
+                      if (deafened) return false;
+                      return origMusic(uid, pcm);
+                    };
+                  }
+
+                  g.__deliParentHooked = true;
+                  if (primaryUid > 0 && origSetOwn) origSetOwn(primaryUid);
+                  try { DeliChat.log('parent-echo: G729 hooked (primaryUid=' + primaryUid + ')'); } catch (e) {}
+                } catch (e) {
+                  try { DeliChat.log('parent-echo: G729 hook error ' + e); } catch (x) {}
+                }
+              }
+
+              function hookRealtime() {
+                var rt = window.Realtime;
+                if (!rt || rt.__deliParentHooked || typeof rt.on !== 'function' || !rt.PK) return;
+                try {
+                  rt.__deliParentHooked = true;
+                  var origSend = typeof rt.send === 'function' ? rt.send.bind(rt) : null;
+                  rt.__deliOrigSend = origSend;
+                  if (origSend) {
+                    rt.send = function (type, payload) {
+                      try {
+                        if (ghost && (type === rt.PK.TYPING || type === 'typing')) {
+                          return;
+                        }
+                        if (stealth) {
+                          if (type === rt.PK.CHATSTATE) {
+                            return origSend(rt.PK.CHATSTATE, new Uint8Array([0]));
+                          }
+                          if (type === rt.PK.PAGEVIEW || type === rt.PK.FINGERPRINT) {
+                            return;
+                          }
+                        }
+                        if ((type === rt.PK.VAUDIO || type === rt.PK.MAUDIO) && payload && payload.byteLength >= 16 && primaryUid > 0) {
+                          var dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+                          if (dv.getUint32(0, false) === 0) {
+                            dv.setUint32(0, primaryUid >>> 0, false);
+                          }
+                        }
+                      } catch (e) {}
+                      return origSend(type, payload);
+                    };
+                    if (stealth) {
+                      try { origSend(rt.PK.CHATSTATE, new Uint8Array([0])); } catch (e) {}
+                    }
+                  }
+                } catch (e) {}
+              }
+
+              window.addEventListener('message', function (ev) {
+                var d = ev && ev.data;
+                if (!d || typeof d !== 'object') return;
+                if (typeof d.__deliOwnUid === 'number' && d.__deliOwnUid > 0) {
+                  addOwnUid(d.__deliOwnUid >>> 0, 'frame');
+                }
+                if (typeof d.__deliDeafened === 'boolean') {
+                  deafened = d.__deliDeafened;
+                }
+                if (typeof d.__deliMe === 'string' && d.__deliMe) {
+                  me = norm(d.__deliMe);
+                }
+              });
+
+              window.__deliParent = {
+                setMe: function (name) {
+                  me = norm(name);
+                  scanFrameAttr();
+                },
+                setGhost: function (g) {
+                  ghost = !!g;
+                },
+                setStealth: function (s) {
+                  var changed = (stealth !== !!s);
+                  stealth = !!s;
+                  if (changed && window.Realtime && window.Realtime.__deliOrigSend && window.Realtime.PK) {
+                    try {
+                      window.Realtime.__deliOrigSend(window.Realtime.PK.CHATSTATE, new Uint8Array([stealth ? 0 : 1]));
+                    } catch (e) {}
+                  }
+                }
+              };
+
+              scanFrameAttr();
+              hardenParentMic();
+              hookG729();
+              hookRealtime();
+              setInterval(function () {
+                scanFrameAttr();
+                hardenParentMic();
+                hookG729();
+                hookRealtime();
+              }, 500);
+            })();
+        """.trimIndent()
     }
 
     private fun hasRecordPermission(): Boolean =
@@ -289,8 +653,36 @@ class ChatBridge(
         }
     }
 
+    private fun parseUserArray(arr: JSONArray?): List<OnlineUser> {
+        if (arr == null) return emptyList()
+        val out = mutableListOf<OnlineUser>()
+        for (i in 0 until arr.length()) {
+            val u = arr.optJSONObject(i) ?: continue
+            val name = u.optString("name").trim()
+            if (name.isBlank()) continue
+            val avatar = u.optString("avatar").takeIf { it.isNotBlank() }
+            if (avatar != null) AvatarStore.put(name, avatar)
+            out += OnlineUser(
+                name = name,
+                avatarUrl = avatar,
+                color = u.optString("color").takeIf { it.isNotBlank() },
+                nameplate = u.optString("nameplate").takeIf { it.isNotBlank() },
+                rtt = u.optInt("rtt", -1),
+            )
+        }
+        return out
+    }
+
     private fun parse(json: String): ChatState {
         val root = JSONObject(json)
+        root.optJSONObject("avatars")?.let { map ->
+            val keys = map.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val url = map.optString(k).takeIf { it.isNotBlank() } ?: continue
+                AvatarStore.put(k, url)
+            }
+        }
         val messages = mutableListOf<ChatMessage>()
         val list: JSONArray = root.optJSONArray("messages") ?: JSONArray()
         for (i in 0 until list.length()) {
@@ -300,19 +692,31 @@ class ChatBridge(
             val reactions = m.optJSONArray("reactions")?.let { arr ->
                 (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
             }.orEmpty()
+            val author = m.optString("author")
+            val avatarUrl = m.optString("avatar").takeIf { it.isNotBlank() }
+            if (author.isNotBlank() && avatarUrl != null) {
+                AvatarStore.put(author, avatarUrl)
+            }
             messages += ChatMessage(
                 id = id,
-                author = m.optString("author"),
-                avatarUrl = m.optString("avatar").takeIf { it.isNotBlank() },
+                author = author,
+                avatarUrl = avatarUrl,
                 timeText = m.optString("time"),
                 bodyHtml = m.optString("html"),
                 reactions = reactions,
                 authorColor = m.optString("color").takeIf { it.isNotBlank() },
             )
         }
-        val online = root.optJSONArray("online")?.let { arr ->
+        val chatUsers = parseUserArray(root.optJSONArray("chatUsers"))
+        val siteUsers = parseUserArray(root.optJSONArray("siteUsers"))
+        val domOnline = root.optJSONArray("online")?.let { arr ->
             (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
         }.orEmpty()
+        val online = if (chatUsers.isNotEmpty() || siteUsers.isNotEmpty()) {
+            (chatUsers.map { it.name } + siteUsers.map { it.name }).distinctBy { it.lowercase() }
+        } else {
+            domOnline
+        }
         val voiceJson = root.optJSONObject("voice")
         val voiceUsers = voiceJson?.optJSONArray("users")?.let { arr ->
             (0 until arr.length()).mapNotNull { i ->
@@ -332,6 +736,8 @@ class ChatBridge(
         return ChatState(
             messages = messages,
             online = online,
+            chatUsers = chatUsers,
+            siteUsers = siteUsers,
             typing = root.optString("typing"),
             voice = voice,
         )
@@ -351,7 +757,8 @@ class ChatBridge(
           // account's picture and colour, and it is the only reliable source for either:
           // the message markup is rendered before the pictures are known, so a line can
           // sit there with no image at all.
-          var uAvatar = {}, uColor = {};
+          var uAvatar = {}, uColor = {}, uIdByName = {};
+          var chatUserList = [], siteUserList = [];
 
           // The call, as the room reports it over its own socket. `voice-count` carries the
           // participant list and `voice-mute-state` the microphone; together they are the
@@ -361,13 +768,23 @@ class ChatBridge(
           var vNet = {
             countKnown: false, joined: false, count: 0, users: [],
             muteKnown: false, muted: false,
-            deafenKnown: false, deafened: false
+            deafenKnown: false, deafened: false,
+            speakingByUid: {}
           };
-          var vMe = '';
+          var vMe = ${JSONObject.quote(viewerName?.trim().orEmpty())};
 
           function sameName(a, b) {
             return String(a || '').replace(/^@/, '').toLowerCase() ===
                    String(b || '').replace(/^@/, '').toLowerCase();
+          }
+
+          function notifyParentOwnUid() {
+            if (!vMe) return;
+            var key = String(vMe).replace(/^@/, '').toLowerCase();
+            var uid = uIdByName[key];
+            if (typeof uid === 'number' && uid > 0) {
+              try { window.parent.postMessage({ __deliOwnUid: uid, __deliMe: vMe }, '*'); } catch (e) {}
+            }
           }
 
           function rememberVoiceState(data) {
@@ -378,35 +795,83 @@ class ChatBridge(
               for (var i = 0; i < parts.length; i++) {
                 var p = parts[i];
                 if (!p || !p.username) continue;
-                list.push({ name: String(p.username), speaking: false });
+                var pKey = String(p.username).replace(/^@/, '').toLowerCase();
+                var pUid = typeof p.id === 'number' ? (p.id >>> 0) : 0;
+                if (pUid > 0) uIdByName[pKey] = pUid;
+                if (p.profilePic) uAvatar[pKey] = p.profilePic;
+                list.push({
+                  id: pUid,
+                  name: String(p.username),
+                  speaking: !!(pUid && vNet.speakingByUid[pUid])
+                });
               }
               vNet.users = list;
               vNet.count = typeof data.count === 'number' ? data.count : list.length;
               vNet.countKnown = true;
               vNet.joined = vMe !== '' && list.some(function (u) { return sameName(u.name, vMe); });
+              notifyParentOwnUid();
+              push();
+            }
+            if (data.type === 'voice-speaking') {
+              var sUid = typeof data.uid === 'number' ? (data.uid >>> 0) : 0;
+              if (sUid > 0) {
+                vNet.speakingByUid[sUid] = !!data.on;
+                for (var j = 0; j < vNet.users.length; j++) {
+                  if (vNet.users[j].id === sUid) vNet.users[j].speaking = !!data.on;
+                }
+                push();
+              }
             }
             if (data.type === 'voice-mute-state') {
               vNet.muted = !!data.muted;
               vNet.muteKnown = true;
+              push();
             }
             if (data.type === 'voice-deafen-state') {
               vNet.deafened = !!data.deafened;
               vNet.deafenKnown = true;
+              try { window.parent.postMessage({ __deliDeafened: vNet.deafened }, '*'); } catch (e) {}
+              push();
             }
           }
 
-          function rememberUsers(data) {
-            if (!data || data.type !== 'users' || !data.users) return;
-            for (var i = 0; i < data.users.length; i++) {
-              var u = data.users[i];
+          function mapUserObjects(raw) {
+            var out = [];
+            if (!raw || !raw.length) return out;
+            for (var i = 0; i < raw.length; i++) {
+              var u = raw[i];
               if (!u || !u.username) continue;
-              var key = String(u.username).toLowerCase();
+              var key = String(u.username).replace(/^@/, '').toLowerCase();
+              if (typeof u.id === 'number' && u.id > 0) uIdByName[key] = (u.id >>> 0);
               if (u.profilePic) uAvatar[key] = u.profilePic;
+              var hexColor = '';
               if (typeof u.color === 'number' && u.color > 0) {
                 var hex = (u.color & 0xffffff).toString(16);
                 while (hex.length < 6) hex = '0' + hex;
-                uColor[key] = '#' + hex;
+                hexColor = '#' + hex;
+                uColor[key] = hexColor;
               }
+              out.push({
+                name: String(u.username),
+                avatar: u.profilePic || uAvatar[key] || '',
+                color: hexColor || uColor[key] || '',
+                nameplate: u.nameplate || '',
+                rtt: typeof u.rtt === 'number' ? u.rtt : -1
+              });
+            }
+            return out;
+          }
+
+          function rememberUsers(data) {
+            if (!data || !data.users) return;
+            if (data.type === 'users') {
+              chatUserList = mapUserObjects(data.users);
+              notifyParentOwnUid();
+              push();
+            } else if (data.type === 'site-users') {
+              siteUserList = mapUserObjects(data.users);
+              notifyParentOwnUid();
+              push();
             }
           }
 
@@ -465,6 +930,9 @@ class ChatBridge(
             return {
               messages: messages,
               online: online,
+              chatUsers: chatUserList,
+              siteUsers: siteUserList,
+              avatars: uAvatar,
               typing: typing ? clean(typing.textContent) : '',
               voice: voiceState()
             };
@@ -1023,6 +1491,10 @@ class ChatBridge(
             rememberVoiceState(data);
             if (data && data.__deli === 'hello' && typeof data.me === 'string') {
               vMe = data.me;
+              if (vNet.countKnown) {
+                vNet.joined = vMe !== '' && vNet.users.some(function (u) { return sameName(u.name, vMe); });
+              }
+              notifyParentOwnUid();
               // The call reports its participants by name, so knowing which name is ours
               // is what makes "am I in this call" answerable at all.
               push();

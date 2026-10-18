@@ -61,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -116,6 +117,13 @@ fun HosetSettingsScreen(
     var showSortDialog by remember { mutableStateOf(false) }
     var hideNsfw by remember { mutableStateOf(HosetPrefs.hideNsfwMedia(context)) }
     var compactFeed by remember { mutableStateOf(HosetPrefs.compactFeed(context)) }
+    var ghostTyping by remember { mutableStateOf(HosetPrefs.ghostTyping(context)) }
+    var stealthOnline by remember { mutableStateOf(HosetPrefs.stealthOnline(context)) }
+    var showHiddenInfo by remember { mutableStateOf(HosetPrefs.showHiddenInfo(context)) }
+    var doubleTapVote by remember { mutableStateOf(HosetPrefs.doubleTapVote(context)) }
+    var mediaDownload by remember { mutableStateOf(HosetPrefs.mediaDownload(context)) }
+    var dimSeenPosts by remember { mutableStateOf(HosetPrefs.dimSeenPosts(context)) }
+    var copyOnLongPress by remember { mutableStateOf(HosetPrefs.copyOnLongPress(context)) }
     var autoUpdate by remember { mutableStateOf(HosetPrefs.autoUpdate(context)) }
     var cacheCleared by remember { mutableStateOf(false) }
     var experimental by remember { mutableStateOf(HosetPrefs.experimental(context)) }
@@ -166,11 +174,7 @@ fun HosetSettingsScreen(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(R.drawable.logo_hoset),
-                contentDescription = null,
-                modifier = Modifier.size(44.dp),
-            )
+            LauncherIconPreview(variant = launcher, size = 44.dp)
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(appTitle, color = DeliColors.OnBackground, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -211,13 +215,31 @@ fun HosetSettingsScreen(
 
             HorizontalDivider(color = DeliColors.Border)
 
-            HosetRow(
-                icon = Icons.Filled.AppShortcut,
-                tint = DeliColors.Blue,
-                title = t("Simge ve kısayol"),
-                subtitle = t(launcher.label) + " · " + t(launcher.subtitle),
-                onClick = { showIconDialog = true },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showIconDialog = true }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LauncherIconPreview(variant = launcher, size = 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(t("Simge ve kısayol"), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        t(launcher.label) + " · " + t(launcher.subtitle),
+                        color = DeliColors.OnSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = DeliColors.OnSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
 
             HorizontalDivider(color = DeliColors.Border)
 
@@ -329,6 +351,111 @@ fun HosetSettingsScreen(
                 onToggle = {
                     hideNsfw = it
                     HosetPrefs.setHideNsfwMedia(context, it)
+                },
+            )
+        }
+
+        SettingsGroupTitle(t("Hoset Mod"))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DeliShapes.card)
+                .kitSurface(padding = 0.dp),
+        ) {
+            HosetToggleRow(
+                icon = Icons.Filled.VisibilityOff,
+                tint = DeliColors.Primary,
+                title = t("Çevrimiçi durumunu gizle (Hayalet mod)"),
+                subtitle = t("Sohbette ve çevrimiçi listelerinde görünmeden mesajları takip et."),
+                checked = stealthOnline,
+                onToggle = {
+                    stealthOnline = it
+                    HosetPrefs.setStealthOnline(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.VisibilityOff,
+                tint = DeliColors.Primary,
+                title = t("Hayalet yazma (Sohbet)"),
+                subtitle = t("Sohbette yazarken karşı tarafa yazıyor bilgisini göndermez."),
+                checked = ghostTyping,
+                onToggle = {
+                    ghostTyping = it
+                    HosetPrefs.setGhostTyping(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.Code,
+                tint = DeliColors.Blue,
+                title = t("Detaylı API bilgilerini göster"),
+                subtitle = t("Profillerde gizli Truescore puanını ve sohbet ping çubuklarını gösterir."),
+                checked = showHiddenInfo,
+                onToggle = {
+                    showHiddenInfo = it
+                    HosetPrefs.setShowHiddenInfo(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.AppShortcut,
+                tint = DeliColors.Success,
+                title = t("Çift dokunuşla beğen"),
+                subtitle = t("Gönderilere çift dokunarak anında yukarı oy verir."),
+                checked = doubleTapVote,
+                onToggle = {
+                    doubleTapVote = it
+                    HosetPrefs.setDoubleTapVote(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.Public,
+                tint = DeliColors.Blue,
+                title = t("Medya indirme butonu"),
+                subtitle = t("Görsel, video ve profil kapaklarını tek dokunuşla indir."),
+                checked = mediaDownload,
+                onToggle = {
+                    mediaDownload = it
+                    HosetPrefs.setMediaDownload(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.History,
+                tint = DeliColors.Warning,
+                title = t("Okunan gönderileri soluklaştır"),
+                subtitle = t("Açtığın gönderilerin başlığını akışta hafifçe soluklaştırır."),
+                checked = dimSeenPosts,
+                onToggle = {
+                    dimSeenPosts = it
+                    HosetPrefs.setDimSeenPosts(context, it)
+                },
+            )
+
+            HorizontalDivider(color = DeliColors.Border)
+
+            HosetToggleRow(
+                icon = Icons.Filled.Edit,
+                tint = DeliColors.Primary,
+                title = t("Basılı tutarak metin kopyala"),
+                subtitle = t("Başlıkları, biyografileri ve yorumları basılı tutarak kopyalar."),
+                checked = copyOnLongPress,
+                onToggle = {
+                    copyOnLongPress = it
+                    HosetPrefs.setCopyOnLongPress(context, it)
                 },
             )
         }
@@ -517,12 +644,18 @@ fun HosetSettingsScreen(
     }
 
     if (showIconDialog) {
+        val customBitmap = remember(showIconDialog) { com.delidehset.mobile.data.IconStore.load(context) }
         AlertDialog(
             onDismissRequest = { showIconDialog = false },
             containerColor = DeliColors.Surface,
             title = { Text(t("Simge ve kısayol"), color = DeliColors.OnBackground, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     for (variant in LauncherVariant.entries) {
                         val active = variant == launcher
                         Row(
@@ -535,9 +668,11 @@ fun HosetSettingsScreen(
                                     HosetPrefs.setLauncherVariant(context, variant)
                                     showIconDialog = false
                                 }
-                                .padding(12.dp),
+                                .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            LauncherIconPreview(variant = variant, size = 40.dp)
+                            Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(t(variant.label), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                 Text(t(variant.subtitle), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
@@ -561,9 +696,29 @@ fun HosetSettingsScreen(
                                     ),
                                 )
                             }
-                            .padding(12.dp),
+                            .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (customBitmap != null) {
+                            Image(
+                                bitmap = customBitmap.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                    .background(DeliColors.SurfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.AppShortcut, contentDescription = null, tint = DeliColors.Primary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(t("Kendi simgen"), color = DeliColors.OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                             Text(t("Galeriden bir görsel seç"), color = DeliColors.OnSurfaceVariant, fontSize = 12.sp)
@@ -818,3 +973,39 @@ private fun HosetRow(
         )
     }
 }
+
+@Composable
+private fun LauncherIconPreview(
+    variant: LauncherVariant,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(size * 0.24f)
+    if (variant == LauncherVariant.CAT) {
+        Image(
+            painter = painterResource(R.drawable.logo_delidehset_cat),
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(shape),
+        )
+        return
+    }
+    val bgColor = when (variant) {
+        LauncherVariant.DEFAULT -> Color.White
+        LauncherVariant.DARK, LauncherVariant.DELI -> Color(0xFF0D1117)
+        LauncherVariant.PURPLE, LauncherVariant.DD -> Color(0xFF805AD5)
+        LauncherVariant.CAT -> Color(0xFF18C899)
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(shape)
+            .background(bgColor),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.logo_hoset),
+            contentDescription = null,
+            modifier = Modifier.size(size * 0.68f),
+        )
+    }
+}
+

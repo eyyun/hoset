@@ -106,8 +106,10 @@ object HtmlParser {
     /*  Post detail + comments                                          */
     /* ---------------------------------------------------------------- */
 
-    fun parsePost(html: String, permalink: String): PostDetail? {
-        val doc = document(html)
+    fun parsePost(html: String, permalink: String): PostDetail? =
+        parsePost(document(html), permalink, html)
+
+    fun parsePost(doc: Document, permalink: String, rawHtml: String = ""): PostDetail? {
         val root = doc.selectFirst("#post-root") ?: return null
         // NB: #post-root itself matches [id^=post-], so the wrapper is matched by
         // its UUID-shaped id instead of by prefix alone.
@@ -115,7 +117,7 @@ object HtmlParser {
             ?: doc.selectFirst("div[id^=post-]:not(#post-root)")
             ?: doc.selectFirst("#post-root")
         val id = container?.id()?.removePrefix("post-")?.takeIf { UUID_RE.matches(it) }
-            ?: UUID_RE.find(html)?.value
+            ?: UUID_RE.find(rawHtml.ifEmpty { doc.outerHtml() })?.value
             ?: return null
 
         val title = doc.selectFirst("#post-title")?.text()?.trim().orEmpty()
@@ -125,11 +127,11 @@ object HtmlParser {
         val authorLink = meta?.selectFirst("a.user-name") ?: meta?.selectFirst("a[href^=/@]")
         val holeLink = meta?.select("a[href^=/h/]")?.firstOrNull()
         val timeTexts = meta?.select("span.text-muted")?.map { it.text() } ?: emptyList()
-        val ago = timeTexts.firstOrNull { it.contains("ago") || it.matches(Regex(".*\\d.*")) }
+        val ago = timeTexts.firstOrNull { it.contains("ago") || HAS_DIGIT_RE.matches(it) }
         val edited = timeTexts.firstOrNull { it.contains("edited", ignoreCase = true) }
 
         val commentCount = doc.selectFirst(".post-actions")?.text()
-            ?.let { Regex("(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
+            ?.let { FIRST_INT_RE.find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
 
         val viewerVote = root.attr("data-page-post-vote").toIntOrNull() ?: 0
 
@@ -139,6 +141,9 @@ object HtmlParser {
             ?: doc.selectFirst(".post-actions .score")?.text()?.trim()?.toIntOrNull()
 
         val deleted = body.contains("deleted", ignoreCase = true) && body.length < 200
+        val authorName = authorLink?.text()?.trim()?.removePrefix("@")
+        val authorAvatar = doc.selectFirst(".actual-post img[src*=/avatar/], .actual-post img[src*=/uploads/], .actual-post img[src*=/pp/]")?.attr("src")
+        AvatarStore.put(authorName, authorAvatar)
 
         return PostDetail(
             id = id,
@@ -147,9 +152,9 @@ object HtmlParser {
             bodyHtml = body,
             hole = holeLink?.text()?.removePrefix("/h/")?.trim(),
             holeHref = holeLink?.attr("href"),
-            authorName = authorLink?.text()?.trim()?.removePrefix("@"),
+            authorName = authorName,
             authorHref = authorLink?.attr("href"),
-            authorAvatar = doc.selectFirst(".actual-post img[src*=/avatar/], .actual-post img[src*=/uploads/], .actual-post img[src*=/pp/]")?.attr("src"),
+            authorAvatar = authorAvatar,
             ago = ago,
             editedAgo = edited,
             commentCount = commentCount,
@@ -166,8 +171,9 @@ object HtmlParser {
      * into `#replies-root`. We consume the JSON directly. Field names differ between
      * builds of the platform, so several aliases are accepted per field.
      */
-    fun parseComments(html: String): List<CommentNode> {
-        val doc = document(html)
+    fun parseComments(html: String): List<CommentNode> = parseComments(document(html))
+
+    fun parseComments(doc: Document): List<CommentNode> {
         val raw = doc.selectFirst("script#replies-data")?.data()?.takeIf { it.isNotBlank() }
             ?: return parseCommentsFromHtml(doc)
         val roots = runCatching {
@@ -237,8 +243,10 @@ object HtmlParser {
         return nodes.filter { it.parentId == null || nodes.none { p -> p.id == it.parentId } }
     }
 
-    fun commentVotes(html: String): Map<String, Int> {
-        val raw = document(html).selectFirst("#post-root")?.attr("data-page-comment-votes")
+    fun commentVotes(html: String): Map<String, Int> = commentVotes(document(html))
+
+    fun commentVotes(doc: Document): Map<String, Int> {
+        val raw = doc.selectFirst("#post-root")?.attr("data-page-comment-votes")
         if (raw.isNullOrBlank()) return emptyMap()
         return runCatching {
             json.parseToJsonElement(raw).jsonObject.mapNotNull { (k, v) ->
@@ -267,16 +275,18 @@ object HtmlParser {
         fun columnOf(vararg keys: String): Int =
             headers.indexOfFirst { header -> keys.any { header.contains(it) } }
 
-        val nameColumn = columnOf("hole name", "topluluk", "hole")
-        val postsColumn = columnOf("posts", "gönderi")
+        val nameColumn = columnOf("hole name", "topluluk", "hole", "isim")
+        val postsColumn = columnOf("posts", "gönderi", "postlar")
         val dateColumn = columnOf("created", "tarih")
         val stealthColumn = columnOf("stealth", "gizli")
-        val publicColumn = columnOf("public", "herkese")
+        val publicColumn = columnOf("public", "herkese", "halka")
 
         return doc.select("table tbody tr").mapNotNull { row ->
             val cells = row.select("td")
             if (cells.size < 3) return@mapNotNull null
-            val link = cells.getOrNull(nameColumn)?.selectFirst("a[href^=/h/]")
+            val nameCell = cells.getOrNull(nameColumn)
+                ?: cells.firstOrNull { it.selectFirst("a[href^=/h/]") != null }
+            val link = nameCell?.selectFirst("a[href^=/h/]")
                 ?: cells.firstNotNullOfOrNull { it.selectFirst("a[href^=/h/]") }
                 ?: return@mapNotNull null
             val texts = cells.map { it.text().trim() }
@@ -291,16 +301,24 @@ object HtmlParser {
                     cell.selectFirst("a[href^=/h/]") != null && countOf(cell.text()) != null
                 }?.text()
 
+            val name = link.text().removePrefix("/h/").trim()
+            val rowLogo = row.selectFirst("img[src]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() }
+            val inviteOnly = nameCell?.select(".badge")?.any {
+                it.text().contains("invite", true) || it.text().contains("davet", true)
+            } == true
+            if (rowLogo != null) HoleStore.put(name, logo = rowLogo)
+
             Hole(
-                name = link.text().removePrefix("/h/").trim(),
+                name = name,
                 href = link.attr("href"),
                 postCount = countOf(postsCell)?.toIntOrNull() ?: 0,
                 createdOn = dateCell,
                 stealth = texts.getOrNull(stealthColumn),
                 publicUse = texts.getOrNull(publicColumn),
-                // A community picture, when the table carries one. The site's own table
-                // does not, which is why the list falls back to the name's initial.
-                logo = row.selectFirst("img[src]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() },
+                // A community picture, when the table carries one or HoleStore remembered it.
+                logo = rowLogo ?: HoleStore.cachedLogo(name),
+                displayName = HoleStore.cachedLabel(name),
+                inviteOnly = inviteOnly,
             )
         }
     }
@@ -318,7 +336,7 @@ object HtmlParser {
         val heading = doc.selectFirst("#main-content-col h3, #main-content-col h2")?.text()?.trim()
             ?: return null
         if (!heading.contains("Follow", true) && !heading.contains("takip", true)) return null
-        val counted = Regex("\\((\\d[\\d.,]*)\\s*([kKmM])?\\)").find(heading) ?: return null
+        val counted = RELATION_COUNT_RE.find(heading) ?: return null
         return countOf(counted.groupValues[1] + counted.groupValues[2])?.toIntOrNull()
     }
 
@@ -326,13 +344,17 @@ object HtmlParser {
     fun parseHoleSettings(html: String, hole: String): HoleSettings? {
         val doc = document(html)
         val main = doc.selectFirst("#main-content-col") ?: return null
-        if (!doc.title().contains("Settings", true) && !doc.title().contains("ayar", true)) return null
+        val hasSettingsMarker = doc.title().contains("Settings", true) ||
+            doc.title().contains("ayar", true) ||
+            main.selectFirst("input[name=display_name], textarea[name=blocked_words], form[action*=marsey_image], .settings-nav, h4") != null
+        if (!hasSettingsMarker) return null
 
         val display = main.selectFirst("input[name=display_name]")?.attr("value")?.trim().orEmpty()
         // Textareas carry the saved value as their text, not as an attribute.
         val ips = main.selectFirst("textarea[name=blocked_ip_ranges]")?.text().orEmpty()
         val words = main.selectFirst("textarea[name=blocked_words]")?.text().orEmpty()
         val logo = main.selectFirst("img[alt=Hole logo]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() }
+        HoleStore.put(hole, logo = logo, label = display)
         val canEdit = main.selectFirst("form[onsubmit*=saveHoleDisplayName]") != null ||
             main.selectFirst("form[onsubmit*=saveHoleContentFilters]") != null ||
             main.selectFirst("form[action*=marsey_image]") != null
@@ -398,6 +420,7 @@ object HtmlParser {
         val counted = doc.selectFirst("#hole--posts, #hole-posts, .hole-post-count")
             ?.text()
             ?: doc.select("#main-content-col .text-muted").firstOrNull { it.text().contains("gönderi", true) }?.text()
+        val state = parseHoleState(doc)
         return Hole(
             name = name,
             href = link.attr("href"),
@@ -406,6 +429,8 @@ object HtmlParser {
             stealth = null,
             publicUse = null,
             description = doc.selectFirst(".hole-description, #main-content-col .text-muted")?.text()?.trim(),
+            logo = state.logo ?: HoleStore.cachedLogo(name),
+            displayName = state.displayName ?: HoleStore.cachedLabel(name),
         )
     }
 
@@ -420,7 +445,7 @@ object HtmlParser {
      */
     internal fun countOf(text: String?): String? {
         if (text.isNullOrBlank()) return null
-        val match = Regex("(\\d[\\d.,]*)\\s*([kKmMbB])?").find(text) ?: return null
+        val match = COUNT_OF_RE.find(text) ?: return null
         val raw = match.groupValues[1].trimEnd('.', ',')
         val suffix = match.groupValues[2].lowercase()
         val value = if (suffix.isEmpty()) {
@@ -508,8 +533,9 @@ object HtmlParser {
      * `#unblock-hole` for blocking. A guest page has neither pair, so `null` is "the page
      * did not say", not "no".
      */
-    fun parseHoleState(html: String): HoleState {
-        val doc = document(html)
+    fun parseHoleState(html: String): HoleState = parseHoleState(document(html))
+
+    fun parseHoleState(doc: Document): HoleState {
         val joined = when {
             doc.selectFirst("#unfollow-hole") != null ->
                 doc.selectFirst("#unfollow-hole")?.hasClass("d-none") == false
@@ -529,9 +555,34 @@ object HtmlParser {
         // `*=`, not `$=`: the site's own link to that page can carry a query string
         // (`/h/x/settings?tab=general`), and requiring it to *end* with `/settings` meant the
         // gear never appeared for the people the community actually lets in there.
-        val canManage = doc.selectFirst("#main-content-col a[href^=/h/][href*=/settings]") != null ||
-            doc.selectFirst("#main-content-col form[action*=/settings]") != null
-        return HoleState(joined = joined, blocked = blocked, canManage = canManage)
+        val canManage = doc.selectFirst("a[href^=/h/][href*=/settings]") != null ||
+            doc.selectFirst("form[action*=/settings], form[action*=/marsey_image], form[onsubmit*=saveHole]") != null
+        // The community's own picture: the sidebar paints it as `<img alt="/h/x icon">` on
+        // every one of that community's pages. The feed's own `hole_logo` is the site's
+        // generic file, so this is the only place the real picture can be read from.
+        val logoImg = doc.selectFirst("img[alt^=/h/][alt$=icon]")
+        val logo = logoImg?.attr("src")?.trim()?.takeIf { it.isNotBlank() && !HoleStore.isGenericLogo(it) }
+        val holeSlug = logoImg?.attr("alt")
+            ?.removePrefix("/h/")
+            ?.removeSuffix("icon")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val displayName = logoImg?.parent()?.selectFirst(".font-weight-bold")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: doc.title().let { title ->
+                if (title.contains("(/h/")) title.substringBefore("(/h/").trim().takeIf { it.isNotBlank() }
+                else null
+            }
+        if (holeSlug != null) {
+            HoleStore.put(holeSlug, logo = logo, label = displayName)
+        }
+        return HoleState(
+            joined = joined,
+            blocked = blocked,
+            canManage = canManage,
+            logo = logo,
+            displayName = displayName,
+        )
     }
 
     fun parseSearch(html: String): List<SimpleRow> {
@@ -617,8 +668,7 @@ object HtmlParser {
                 name = name,
                 href = el.selectFirst("a[href]")?.attr("href"),
                 description = el.selectFirst("p, small, .text-muted")?.text()?.trim(),
-                price = Regex("(\\d+)\\s*(mern|marseybux|coin|token)", RegexOption.IGNORE_CASE)
-                    .find(el.text())?.value,
+                price = BADGE_PRICE_RE.find(el.text())?.value,
             )
         }
     }
@@ -657,7 +707,7 @@ object HtmlParser {
 
         // "Joined 29 Sep 2026" — the screen renders its own "Katılım:" label.
         val joined = main.selectFirst("#profile--joined")?.text()?.trim()
-            ?.replace(Regex("(?i)^joined\\s*"), "")
+            ?.replace(JOINED_PREFIX_RE, "")
             ?.takeIf { it.isNotBlank() }
 
         val subButton = main.selectFirst("#button-sub")
@@ -675,10 +725,7 @@ object HtmlParser {
         // The account's own pronouns, which the site prints under the name. The app could
         // already *set* them in the account settings and never showed them here.
         val pronouns = main.selectFirst("#profile--pronouns")?.text()?.trim()?.let { text ->
-            Regex("(pronouns?|zamirler?)\\s*:?\\s*", RegexOption.IGNORE_CASE)
-                .replaceFirst(text, "")
-                .trim()
-                .takeIf { it.isNotBlank() }
+            PRONOUNS_PREFIX_RE.replaceFirst(text, "").trim().takeIf { it.isNotBlank() }
         }
 
         val moderation = main.selectFirst("a[href*=target_id=]")?.attr("href")
@@ -687,9 +734,9 @@ object HtmlParser {
         // The profile's own tabs, with the counts the site prints beside them.
         val tabs = main.select(".settings-nav a.nav-link, #content a.nav-link").mapNotNull { a ->
             val href = a.attr("href").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val count = a.selectFirst(".count")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
+            val count = a.selectFirst(".count")?.text()?.let { FIRST_INT_RE.find(it)?.value?.toIntOrNull() }
             ProfileTab(
-                label = a.text().replace(Regex("\\(\\d+\\)"), "").trim(),
+                label = a.text().replace(PAREN_INT_RE, "").trim(),
                 href = href,
                 count = count,
                 active = a.hasClass("active"),
@@ -707,6 +754,10 @@ object HtmlParser {
         // The wall itself: the same cards the feed draws, so the first tab is the
         // person's posts rather than an empty page with two counters on it.
         val wall = feedCardsFrom(doc)
+        val avatarUrl = main.selectFirst("#profile--pfp img[src]")?.attr("src")
+            ?: main.selectFirst("img[src*=/avatar/]")?.attr("src")
+            ?: main.selectFirst("img[src*=/pp/]")?.attr("src")
+        AvatarStore.put(name, avatarUrl)
 
         return UserProfile(
             id = main.selectFirst("#profile--info--id")?.text()?.substringAfter("ID:")?.trim()
@@ -715,9 +766,7 @@ object HtmlParser {
             name = name,
             href = "/@$name",
             bio = bio,
-            avatarUrl = main.selectFirst("#profile--pfp img[src]")?.attr("src")
-                ?: main.selectFirst("img[src*=/avatar/]")?.attr("src")
-                ?: main.selectFirst("img[src*=/pp/]")?.attr("src"),
+            avatarUrl = avatarUrl,
             joinedAgo = joined,
             stats = stats,
             isFollowing = when {
@@ -762,8 +811,10 @@ object HtmlParser {
      * markup or from the JavaScript bundle. Instead of hard-coding names we may get
      * wrong, the app mirrors whatever the server currently expects.
      */
-    fun parseForm(html: String, cssSelector: String): DiscoveredForm? {
-        val doc = document(html)
+    fun parseForm(html: String, cssSelector: String): DiscoveredForm? =
+        parseForm(document(html), cssSelector)
+
+    fun parseForm(doc: Document, cssSelector: String): DiscoveredForm? {
         val form = doc.selectFirst(cssSelector) ?: return null
         return buildForm(form)
     }
@@ -1117,6 +1168,14 @@ object HtmlParser {
 
     private val UUID_RE =
         Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+    private val HAS_DIGIT_RE = Regex(".*\\d.*")
+    private val FIRST_INT_RE = Regex("(\\d+)")
+    private val RELATION_COUNT_RE = Regex("\\((\\d[\\d.,]*)\\s*([kKmM])?\\)")
+    private val COUNT_OF_RE = Regex("(\\d[\\d.,]*)\\s*([kKmMbB])?")
+    private val BADGE_PRICE_RE = Regex("(\\d+)\\s*(mern|marseybux|coin|token)", RegexOption.IGNORE_CASE)
+    private val JOINED_PREFIX_RE = Regex("(?i)^joined\\s*")
+    private val PRONOUNS_PREFIX_RE = Regex("(pronouns?|zamirler?)\\s*:?\\s*", RegexOption.IGNORE_CASE)
+    private val PAREN_INT_RE = Regex("\\(\\d+\\)")
 }
 
 /** A form the server rendered, remade as data so the app can post it back. */

@@ -17,6 +17,7 @@ enum class LauncherVariant(
     DARK("dark", "com.delidehset.mobile.MainActivityDark", "Hoset (Koyu)", "Gece zeminli simge"),
     PURPLE("purple", "com.delidehset.mobile.MainActivityPurple", "Hoset (Mor)", "Vurgu renkli simge"),
     DELI("deli", "com.delidehset.mobile.MainActivityDeli", "Delidehşet", "Site adıyla koyu simge"),
+    CAT("cat", "com.delidehset.mobile.MainActivityCat", "Delidehşet (Kedi)", "Yeşil kedi simgesi"),
     DD("dd", "com.delidehset.mobile.MainActivityDD", "DD", "Kısa ad ve mor simge"),
 }
 
@@ -38,11 +39,27 @@ object HosetPrefs {
     private const val KEY_RULES_TEXT = "rules_text"
     private const val KEY_EXPERIMENTAL = "experimental"
     private const val KEY_REDUCE_MOTION = "reduce_motion"
+    private const val KEY_GHOST_TYPING = "mod_ghost_typing"
+    private const val KEY_STEALTH_ONLINE = "mod_stealth_online"
+    private const val KEY_SHOW_HIDDEN_INFO = "mod_show_hidden_info"
+    private const val KEY_DOUBLE_TAP_VOTE = "mod_double_tap_vote"
+    private const val KEY_MEDIA_DOWNLOAD = "mod_media_download"
+    private const val KEY_DIM_SEEN_POSTS = "mod_dim_seen_posts"
+    private const val KEY_COPY_LONG_PRESS = "mod_copy_long_press"
+    private const val KEY_SEEN_POSTS = "mod_seen_posts"
 
     val appTitleState = mutableStateOf("Hoset")
     val fontScaleState = mutableFloatStateOf(1.0f)
     val hideNsfwMediaState = mutableStateOf(false)
     val compactFeedState = mutableStateOf(false)
+    val ghostTypingState = mutableStateOf(false)
+    val stealthOnlineState = mutableStateOf(false)
+    val showHiddenInfoState = mutableStateOf(true)
+    val doubleTapVoteState = mutableStateOf(true)
+    val mediaDownloadState = mutableStateOf(true)
+    val dimSeenPostsState = mutableStateOf(false)
+    val copyOnLongPressState = mutableStateOf(true)
+    val seenPostsState = mutableStateOf<Set<String>>(emptySet())
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -53,6 +70,98 @@ object HosetPrefs {
         fontScaleState.floatValue = p.getFloat(KEY_FONT_SCALE, 1.0f).coerceIn(0.85f, 1.25f)
         hideNsfwMediaState.value = p.getBoolean(KEY_HIDE_NSFW_MEDIA, false)
         compactFeedState.value = p.getBoolean(KEY_COMPACT_FEED, false)
+        ghostTypingState.value = p.getBoolean(KEY_GHOST_TYPING, false)
+        stealthOnlineState.value = p.getBoolean(KEY_STEALTH_ONLINE, false)
+        showHiddenInfoState.value = p.getBoolean(KEY_SHOW_HIDDEN_INFO, true)
+        doubleTapVoteState.value = p.getBoolean(KEY_DOUBLE_TAP_VOTE, true)
+        mediaDownloadState.value = p.getBoolean(KEY_MEDIA_DOWNLOAD, true)
+        dimSeenPostsState.value = p.getBoolean(KEY_DIM_SEEN_POSTS, false)
+        copyOnLongPressState.value = p.getBoolean(KEY_COPY_LONG_PRESS, true)
+        seenPostsState.value = p.getStringSet(KEY_SEEN_POSTS, emptySet())?.toSet().orEmpty()
+    }
+
+    fun ghostTyping(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_GHOST_TYPING, false)
+
+    fun setGhostTyping(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_GHOST_TYPING, enabled).apply()
+        ghostTypingState.value = enabled
+    }
+
+    fun stealthOnline(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_STEALTH_ONLINE, false)
+
+    fun setStealthOnline(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_STEALTH_ONLINE, enabled).apply()
+        stealthOnlineState.value = enabled
+    }
+
+    fun showHiddenInfo(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHOW_HIDDEN_INFO, true)
+
+    fun setShowHiddenInfo(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHOW_HIDDEN_INFO, enabled).apply()
+        showHiddenInfoState.value = enabled
+    }
+
+    fun doubleTapVote(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DOUBLE_TAP_VOTE, true)
+
+    fun setDoubleTapVote(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DOUBLE_TAP_VOTE, enabled).apply()
+        doubleTapVoteState.value = enabled
+    }
+
+    fun mediaDownload(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_MEDIA_DOWNLOAD, true)
+
+    fun setMediaDownload(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MEDIA_DOWNLOAD, enabled).apply()
+        mediaDownloadState.value = enabled
+    }
+
+    fun dimSeenPosts(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DIM_SEEN_POSTS, false)
+
+    fun setDimSeenPosts(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DIM_SEEN_POSTS, enabled).apply()
+        dimSeenPostsState.value = enabled
+    }
+
+    fun copyOnLongPress(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_COPY_LONG_PRESS, true)
+
+    fun setCopyOnLongPress(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_COPY_LONG_PRESS, enabled).apply()
+        copyOnLongPressState.value = enabled
+    }
+
+    fun markPostSeen(context: Context, key: String) {
+        val clean = key.trim().ifBlank { return }
+        if (clean in seenPostsState.value) return
+        val next = (seenPostsState.value + clean).toList().takeLast(500).toSet()
+        seenPostsState.value = next
+        prefs(context).edit().putStringSet(KEY_SEEN_POSTS, next).apply()
+    }
+
+    fun downloadMedia(context: Context, rawUrl: String): Boolean {
+        val fullUrl = when {
+            rawUrl.startsWith("http://") || rawUrl.startsWith("https://") -> rawUrl
+            rawUrl.startsWith("/") -> DeliHttp.BASE_URL + rawUrl
+            else -> "${DeliHttp.BASE_URL}/$rawUrl"
+        }
+        return runCatching {
+            val uri = android.net.Uri.parse(fullUrl)
+            val ext = uri.lastPathSegment?.substringAfterLast('.', "")
+                ?.takeIf { it.length in 2..5 } ?: "webp"
+            val fileName = "hoset_${System.currentTimeMillis()}.$ext"
+            val req = android.app.DownloadManager.Request(uri)
+                .setTitle(fileName)
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName)
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+            dm?.enqueue(req) != null
+        }.getOrDefault(false)
     }
 
     fun appTitle(context: Context): String =

@@ -268,8 +268,21 @@ fun ChatScreen(
             )
         }
 
+        var showOnline by remember { mutableStateOf(false) }
+        val stealthOnline by com.delidehset.mobile.data.HosetPrefs.stealthOnlineState
+        val showHiddenInfo by com.delidehset.mobile.data.HosetPrefs.showHiddenInfoState
+
+        LaunchedEffect(stealthOnline) {
+            if (!viewerName.isNullOrBlank()) {
+                session.hello(viewerName)
+            }
+        }
+
         RoomHeader(
             online = chat.online,
+            chatCount = chat.chatUsers.size,
+            siteCount = chat.siteUsers.size,
+            stealth = stealthOnline,
             typing = chat.typing,
             status = status,
             voice = chat.voice,
@@ -277,7 +290,123 @@ fun ChatScreen(
             onOpenVoicePanel = { voiceOpen = !voiceOpen },
             onToggleMic = { session.voice(mic = !chat.voice.muted) },
             onLeaveVoice = { session.voice(join = false) },
+            onOpenOnline = { showOnline = true },
         )
+
+        if (showOnline) {
+            val chatList = if (chat.chatUsers.isNotEmpty()) {
+                chat.chatUsers
+            } else {
+                chat.online.map { com.delidehset.mobile.data.OnlineUser(name = it) }
+            }
+            val siteList = chat.siteUsers
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showOnline = false },
+                containerColor = DeliColors.Surface,
+                title = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            t("Çevrimiçi Kişiler"),
+                            color = DeliColors.OnBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                        )
+                    }
+                },
+                text = {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(DeliShapes.control)
+                                    .background(DeliColors.Background)
+                                    .clickable {
+                                        com.delidehset.mobile.data.HosetPrefs.setStealthOnline(context, !stealthOnline)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        t("Çevrimiçi durumunu gizle (Hayalet mod)"),
+                                        color = DeliColors.OnBackground,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        if (stealthOnline) t("Sohbette gizlisin") else t("Sohbette görünürsün"),
+                                        color = if (stealthOnline) DeliColors.Success else DeliColors.OnSurfaceVariant,
+                                        fontSize = 11.sp,
+                                    )
+                                }
+                                androidx.compose.material3.Switch(
+                                    checked = stealthOnline,
+                                    onCheckedChange = {
+                                        com.delidehset.mobile.data.HosetPrefs.setStealthOnline(context, it)
+                                    },
+                                )
+                            }
+                        }
+
+                        item {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                tf("Sohbette ({0})", chatList.size),
+                                color = DeliColors.OnSurfaceVariant,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+
+                        itemsIndexed(chatList) { _, u ->
+                            OnlineUserRow(
+                                user = u,
+                                showPingMs = showHiddenInfo,
+                                onClick = {
+                                    showOnline = false
+                                    onOpenUser(u.name)
+                                },
+                            )
+                        }
+
+                        if (siteList.isNotEmpty()) {
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    tf("Sitede Çevrimiçi ({0})", siteList.size),
+                                    color = DeliColors.OnSurfaceVariant,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+
+                            itemsIndexed(siteList) { _, u ->
+                                OnlineUserRow(
+                                    user = u,
+                                    showPingMs = showHiddenInfo,
+                                    onClick = {
+                                        showOnline = false
+                                        onOpenUser(u.name)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { showOnline = false }) {
+                        Text(t("Kapat"), color = DeliColors.Primary)
+                    }
+                },
+            )
+        }
 
         AnimatedVisibility(
             visible = voiceOpen,
@@ -298,6 +427,7 @@ fun ChatScreen(
                     speakerOn = !speakerOn
                     CallAudio.setSpeaker(context, speakerOn)
                 },
+                onOpenUser = onOpenUser,
             )
         }
 
@@ -396,8 +526,97 @@ fun ChatScreen(
 }
 
 @Composable
+private fun OnlineUserRow(
+    user: com.delidehset.mobile.data.OnlineUser,
+    showPingMs: Boolean,
+    onClick: () -> Unit,
+) {
+    val userColor = remember(user.name, user.color) {
+        parseCssColor(user.color)?.takeIf { it != DeliColors.Primary } ?: nameColor(user.name)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(DeliShapes.small)
+            .clickable(onClick = onClick)
+            .padding(vertical = 5.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DeliAvatar(url = user.avatarUrl, name = user.name, size = 30.dp, accent = userColor)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "@${user.name}",
+            color = userColor,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        if (!user.nameplate.isNullOrBlank()) {
+            Text(
+                user.nameplate,
+                color = DeliColors.Primary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(DeliColors.Primary.copy(alpha = 0.14f))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            )
+        }
+        if (showPingMs && user.rtt >= 0) {
+            Text(
+                "${user.rtt} ms",
+                color = DeliColors.OnSurfaceVariant,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        }
+        SignalBars(rtt = user.rtt)
+    }
+}
+
+@Composable
+private fun SignalBars(rtt: Int) {
+    // Matches the site's 4-bar signal indicator in the chat sidebar
+    val activeBars = when {
+        rtt < 0 -> 3
+        rtt < 90 -> 4
+        rtt < 180 -> 3
+        rtt < 320 -> 2
+        else -> 1
+    }
+    val barColor = when (activeBars) {
+        4, 3 -> Color(0xFF3FB950)
+        2 -> Color(0xFFD29922)
+        else -> Color(0xFFF85149)
+    }
+    val inactiveColor = DeliColors.OnSurfaceVariant.copy(alpha = 0.25f)
+    val heights = listOf(4.dp, 7.dp, 10.dp, 13.dp)
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.height(14.dp),
+    ) {
+        for (i in 0 until 4) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(heights[i])
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(if (i < activeBars) barColor else inactiveColor),
+            )
+        }
+    }
+}
+
+@Composable
 private fun RoomHeader(
     online: List<String>,
+    chatCount: Int = 0,
+    siteCount: Int = 0,
+    stealth: Boolean = false,
     typing: String,
     status: String,
     voice: VoiceState,
@@ -405,6 +624,7 @@ private fun RoomHeader(
     onOpenVoicePanel: () -> Unit,
     onToggleMic: () -> Unit,
     onLeaveVoice: () -> Unit,
+    onOpenOnline: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -416,16 +636,30 @@ private fun RoomHeader(
         Icon(
             Icons.Filled.Groups,
             contentDescription = null,
-            tint = DeliColors.Success,
+            tint = if (stealth) DeliColors.Primary else DeliColors.Success,
             modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(6.dp))
-        Column(modifier = Modifier.weight(1f).padding(vertical = 9.dp)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onOpenOnline() }
+                .padding(vertical = 9.dp),
+        ) {
+            val headerLine = when {
+                chatCount > 0 && siteCount > 0 ->
+                    tf("Sohbette ({0})", chatCount) + " · " + tf("Sitede Çevrimiçi ({0})", siteCount)
+                online.isNotEmpty() ->
+                    tf("Çevrimiçi: {0}", online.joinToString(", "))
+                else ->
+                    t("Çevrimiçi")
+            }
             Text(
-                if (online.isEmpty()) t("Çevrimiçi") else tf("Çevrimiçi: {0}", online.joinToString(", ")),
+                headerLine,
                 color = DeliColors.OnBackground,
                 fontSize = 12.sp,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // While you are in the call this line is the answer to the only question
@@ -613,6 +847,7 @@ private fun VoicePanel(
     onJoin: () -> Unit,
     onToggleDeafen: () -> Unit,
     onToggleSpeaker: () -> Unit,
+    onOpenUser: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -628,9 +863,6 @@ private fun VoicePanel(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.weight(1f))
-            // Say where you stand, and say it in the microphone's own words: "Bağlısın"
-            // left the one question this screen has to answer — am I on air or not — to a
-            // small icon the reader had to interpret.
             Text(
                 when {
                     !voice.joined -> "Seste değilsin"
@@ -679,29 +911,26 @@ private fun VoicePanel(
         } else {
             voice.users.forEach { user: VoiceUser ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(DeliShapes.small)
+                        .clickable { onOpenUser(user.name) }
+                        .padding(vertical = 4.dp, horizontal = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Same colour rule as the message list: the name owns its colour,
-                    // and speaking is a ring around it rather than a colour of its own.
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
-                            .background(nameColor(user.name).copy(alpha = 0.28f))
                             .border(
-                                if (user.speaking) 2.dp else 1.dp,
+                                if (user.speaking) 2.5.dp else 1.dp,
                                 if (user.speaking) DeliColors.Success else nameColor(user.name).copy(alpha = 0.5f),
                                 CircleShape,
-                            ),
+                            )
+                            .padding(2.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            com.delidehset.mobile.ui.components.initialOf(user.name) ?: "?",
-                            color = nameColor(user.name),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        DeliAvatar(url = null, name = user.name, size = 27.dp)
                     }
                     Spacer(Modifier.width(9.dp))
                     Text(
@@ -717,7 +946,7 @@ private fun VoicePanel(
                             Icons.Filled.GraphicEq,
                             contentDescription = null,
                             tint = DeliColors.Success,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }

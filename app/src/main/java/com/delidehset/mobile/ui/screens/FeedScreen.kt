@@ -86,6 +86,8 @@ fun FeedScreen(
     val holeFollowing by vm.holeFollowing.collectAsStateWithLifecycle()
     val holeBlocked by vm.holeBlocked.collectAsStateWithLifecycle()
     val holeCanManage by vm.holeCanManage.collectAsStateWithLifecycle()
+    val holeLogo by vm.holeLogo.collectAsStateWithLifecycle()
+    val holeDisplayName by vm.holeDisplayName.collectAsStateWithLifecycle()
     val vmMessage by vm.message.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -136,13 +138,13 @@ fun FeedScreen(
                     .padding(start = 12.dp, end = 12.dp, top = 10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // The community's own picture when the site has one, its initial
-                    // otherwise — the same drawing the community list uses.
-                    HoleLogo(url = null, name = hole, size = 34.dp)
+                    // The community's own picture off its page's sidebar, and its initial
+                    // until that page has answered.
+                    HoleLogo(url = holeLogo, name = hole, size = 42.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "/h/$hole",
+                            text = holeDisplayName?.takeIf { it.isNotBlank() } ?: "/h/$hole",
                             color = DeliColors.OnBackground,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
@@ -150,9 +152,11 @@ fun FeedScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = t("Topluluk"),
+                            text = if (!holeDisplayName.isNullOrBlank()) "/h/$hole · ${t("Topluluk")}" else t("Topluluk"),
                             color = DeliColors.OnSurfaceVariant,
                             fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     val following = holeFollowing == true
@@ -163,8 +167,10 @@ fun FeedScreen(
                             .clickable { vm.toggleHoleFollow(hole) }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     ) {
+                        // The site's own wording for the two: "leave this community" has to
+                        // read like an exit, not like a follow that stopped.
                         Text(
-                            text = t(if (following) "Takipten çık" else "Takip et"),
+                            text = t(if (following) "Topluluktan ayrıl" else "Topluluğa katıl"),
                             color = if (following) DeliColors.OnBackground else androidx.compose.ui.graphics.Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -179,20 +185,15 @@ fun FeedScreen(
                             .size(22.dp)
                             .clickable { vm.toggleHoleBlock(hole) },
                     )
-                    // Only the community's own page says who may change it; when it says
-                    // this account can, the gear appears. Anybody else simply never sees
-                    // a control the site would refuse.
-                    if (holeCanManage) {
-                        Spacer(Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = t("Topluluk ayarları"),
-                            tint = DeliColors.OnSurfaceVariant,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clickable { onOpenHoleSettings(hole) },
-                        )
-                    }
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = t("Topluluk ayarları"),
+                        tint = if (holeCanManage) DeliColors.Primary else DeliColors.OnSurfaceVariant,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable { onOpenHoleSettings(hole) },
+                    )
                 }
 
                 Spacer(Modifier.height(8.dp))

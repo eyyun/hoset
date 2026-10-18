@@ -12,37 +12,38 @@ object WhatsNew {
 
     /** Newest first; the keys are `BuildConfig.VERSION_NAME` shapes. */
     private val byVersion: Map<String, List<String>> = mapOf(
+        "1.3.7" to listOf(
+            "Profiller artık bekletmeden anında açılıyor; kapak ve profil fotoğraflarını büyütüp indirebilirsin.",
+            "Hoset Mod özellikleri geldi: sohbette kendini gizleme (hayalet mod), çift dokunuşla beğenme, video/görsel indirme ve gizli Truescore puanı.",
+            "Sohbette kimlerin odada, kimlerin sitede çevrimiçi olduğunu ve bağlantı güçlerini görebilirsin.",
+            "Detaylı temalar baştan aşağı yenilendi: yüzen alt bar, hareketli arka plan efektleri ve özel kart tasarımları.",
+            "Uygulama simgelerine yeşil kedi (Delidehşet) eklendi, ayarlara simge önizlemeleri kondu.",
+        ),
         "1.3.6" to listOf(
-            "Oy okları sadeleşti: yuvarlak yok; düz kitlerde oyla birlikte daire geliyor.",
-            "Topluluk listesindeki gönderi sayıları artık gerçek sayılar.",
-            "Profildeki takipçi ve takip sayıları sitenin yanlış sayacına değil, listenin kendisine bakıyor.",
-            "Yenileme göstergesi yalnızca elle aşağı çekince görünüyor.",
+            "Oy butonları daha sade ve temiz hale getirildi.",
+            "Topluluklardaki gönderi sayıları ile profildeki takipçi sayıları artık doğru görünüyor.",
+            "Sayfa geçişlerinde kendi kendine çıkan yenileme halkası kaldırıldı, sadece aşağı çekince çıkıyor.",
         ),
         "1.3.5" to listOf(
-            "Deneysel sürümler ayarı geldi: açarsan ön sürümler sana da gelir.",
-            "Sürüm geçmişi: eski bir sürümü seçip indirebilirsin.",
-            "Hareketleri azalt ayarı ekran geçişlerini sadeleştirir.",
-            "Kurallar menüden açılıyor; site kuralları uygulamanın kendi ekranında.",
+            "Ayarlardan eski sürümleri indirebilir veya deneysel sürümleri açabilirsin.",
+            "Gizli topluluklara katılma isteği gönderme ve moderatörler için topluluk ayarları eklendi.",
+            "Site kuralları artık menüden direkt uygulama içinde açılıyor.",
+            "Animasyonları sevmiyorsan ayarlardan hareketleri azaltabilirsin.",
         ),
         "1.3.4" to listOf(
-            "Aşağı oy artık görünüyor: seçtiğin okun arkası dolu, puan da onun renginde.",
-            "Sohbet ekrandan çıkınca bağlı kalıyor; dönüşte oda anında yerinde.",
-            "Uygulama kapalıyken bile son sohbet mesajları ekranda duruyor.",
-            "delidehset.com bağlantıları artık uygulamada açılıyor.",
-            "Topluluk listesinde toplulukların kendi görselleri var.",
-            "Ayarlardan kendi simgeni seçip kırpabilir, ana ekrana ekleyebilirsin.",
-            "Tema Mağazası basit ve detaylı kitler olarak ikiye ayrıldı.",
+            "Sohbetten başka ekrana geçsen bile bağlantın kopmuyor, geri döndüğünde kaldığın yerden devam ediyorsun.",
+            "Ayarlardan galerindeki bir fotoğrafı kırpıp uygulama simgesi yapabilirsin.",
+            "delidehset.com linkleri artık tarayıcı yerine direkt uygulamada açılıyor.",
+            "Tema mağazasına basit ve detaylı tema seçenekleri eklendi.",
         ),
         "1.3.3" to listOf(
-            "Güncelleme kurulurken uygulama donmuyor; ilerleme görünür kalıyor.",
-            "Kurulum biterken ekran artık yanıt vermiyor gibi durmuyor.",
+            "Güncelleme indirirken uygulamanın takılma sorunu çözüldü.",
+            "Profilden bir yoruma tıkladığında direkt o yorumun olduğu yere kayıyor.",
         ),
         "1.3.2" to listOf(
-            "Profil fotoğrafları artık yorumlarda, gönderilerde ve listelerde görünüyor.",
-            "Yorum, takipçi ve takip listelerindeki hatalar düzeltildi.",
-            "Video gönderileri kendi karesini gösteriyor.",
-            "Geri düğmesi her ekranda çalışıyor.",
-            "Sohbet daha hızlı açılıyor.",
+            "Yorumlarda, akışta ve listelerde herkesin profil fotoğrafı görünüyor.",
+            "Videolar artık siyah ekran yerine kendi önizleme karesiyle duruyor.",
+            "Takipçi ve takip edilen listeleri uygulama içinde açılıyor.",
         ),
     )
 

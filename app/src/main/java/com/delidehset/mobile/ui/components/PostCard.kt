@@ -58,29 +58,63 @@ fun PostCard(
     val excerptText = remember(post.id, post.excerptMobile, post.excerptDesktop) {
         DeliHtml.excerpt(post.excerptMobile ?: post.excerptDesktop)
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val doubleTapVote = com.delidehset.mobile.data.HosetPrefs.doubleTapVoteState.value
+    val dimSeen = com.delidehset.mobile.data.HosetPrefs.dimSeenPostsState.value
+    val copyLongPress = com.delidehset.mobile.data.HosetPrefs.copyOnLongPressState.value
+    val showDownload = com.delidehset.mobile.data.HosetPrefs.mediaDownloadState.value
+    val seenPosts = com.delidehset.mobile.data.HosetPrefs.seenPostsState.value
+    val isSeen = dimSeen && (post.permalink in seenPosts || post.id in seenPosts)
 
-    DeliCard(modifier = modifier, onClick = onOpen) {
+    DeliCard(
+        modifier = modifier,
+        onClick = {
+            com.delidehset.mobile.data.HosetPrefs.markPostSeen(context, post.permalink.ifBlank { post.id })
+            onOpen()
+        },
+        onDoubleClick = if (doubleTapVote && canVote) {
+            {
+                val next = if (post.viewerVote == 1) 0 else 1
+                onVote(next)
+            }
+        } else null,
+        onLongClick = if (copyLongPress) {
+            {
+                val full = if (excerptText.isNotBlank()) "$titleText\n\n$excerptText" else titleText
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(full))
+                android.widget.Toast.makeText(
+                    context,
+                    com.delidehset.mobile.ui.tr("Metin kopyalandı."),
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+        } else null,
+    ) {
         // ---- hole header ----
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // The feed's `hole_logo` is the site's *generic* community picture today —
-            // the same file for every hole — so drawing it made every community look
-            // identical. A real uploaded logo is used when there is one; otherwise the
-            // community gets the initial its own list already gives it.
-            val given = post.holeLogo?.takeIf { it.isNotBlank() }
-            val generic = given == null || given.contains("hole.webp") || given.contains("images/logo")
-            com.delidehset.mobile.ui.screens.HoleLogo(
-                url = given.takeUnless { generic },
-                name = post.hole ?: post.holeLabel ?: "general",
-                size = 22.dp,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = post.holeLabel ?: post.hole ?: "general",
-                color = DeliColors.Blue,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable { post.hole?.let(onOpenHole) },
-            )
+            ) {
+                com.delidehset.mobile.ui.screens.HoleLogo(
+                    url = post.holeLogo,
+                    name = post.hole ?: post.holeLabel ?: "general",
+                    size = 24.dp,
+                )
+                Spacer(Modifier.width(8.dp))
+                val label = com.delidehset.mobile.data.HoleStore.cachedLabel(post.hole)
+                    ?.let { "$it · /h/${post.hole}" }
+                    ?: post.holeLabel
+                    ?: post.hole?.let { "/h/$it" }
+                    ?: "general"
+                Text(
+                    text = label,
+                    color = DeliColors.Blue,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             if (post.nsfw) {
                 Spacer(Modifier.width(8.dp))
                 Box(
@@ -99,7 +133,7 @@ fun PostCard(
         // ---- title ----
         Text(
             text = titleText,
-            color = DeliColors.OnBackground,
+            color = if (isSeen) DeliColors.OnSurfaceVariant else DeliColors.OnBackground,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 3,
@@ -135,15 +169,38 @@ fun PostCard(
             VideoThumb(url = image, videoUrl = video, modifier = Modifier.fillMaxWidth())
         } else if (showMedia && image != null && !isVideoUrl(image)) {
             Spacer(Modifier.height(8.dp))
-            AsyncImage(
-                model = DeliHttp.BASE_URL + image,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(DeliShapes.small),
-                contentScale = ContentScale.Crop,
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AsyncImage(
+                    model = DeliHttp.BASE_URL + image,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .clip(DeliShapes.small),
+                    contentScale = ContentScale.Crop,
+                )
+                if (showDownload) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                            .clickable {
+                                val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, image)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    com.delidehset.mobile.ui.tr(if (ok) "İndirme başlatıldı." else "İndirilemedi."),
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("↓", color = androidx.compose.ui.graphics.Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(8.dp))

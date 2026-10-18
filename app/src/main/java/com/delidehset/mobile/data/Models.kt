@@ -115,8 +115,12 @@ data class Hole(
     val stealth: String?,
     val publicUse: String?,
     val description: String? = null,
-    /** The community's own picture, as the site's table renders it. */
+    /** The community's own picture, as the site's table or sidebar renders it. */
     val logo: String? = null,
+    /** The community's display title off its page sidebar. */
+    val displayName: String? = null,
+    /** True when the community carries the `invite only` badge on `/holes`. */
+    val inviteOnly: Boolean = false,
 )
 
 /** What a community's own page says about the viewer's relationship to it. */
@@ -128,6 +132,16 @@ data class HoleState(
      * only for the people who run it, so its absence is the permission check.
      */
     val canManage: Boolean = false,
+    /**
+     * The community's own picture, as its page's sidebar paints it.
+     *
+     * The feed's `hole_logo` is the site's generic file — the same one for every community —
+     * so the app drew an initial instead. The real picture is the `<img alt="/h/x icon">`
+     * the site puts in the sidebar of the community's own pages, and this is that URL.
+     */
+    val logo: String? = null,
+    /** The community's human-readable title in the sidebar. */
+    val displayName: String? = null,
 )
 
 /**
@@ -235,6 +249,8 @@ data class UserProfile(
     val canModerate: Boolean = false,
     /** The posts the Wall tab lists — the same cards, read off the same page. */
     val wallPosts: List<FeedPost> = emptyList(),
+    /** Hidden backend score returned by `/api/profile/{name}`. */
+    val truescore: Int? = null,
 )
 
 data class DailyCount(val label: String, val count: Int)

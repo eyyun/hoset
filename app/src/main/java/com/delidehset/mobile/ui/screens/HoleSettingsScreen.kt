@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.delidehset.mobile.data.DeliHttp
+import com.delidehset.mobile.data.HoleStore
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.DeliCard
@@ -68,6 +69,7 @@ fun HoleSettingsScreen(
     hole: String,
     contentPadding: PaddingValues,
     onMessage: (String) -> Unit,
+    onOpenWeb: (path: String, title: String) -> Unit = { _, _ -> },
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -133,6 +135,10 @@ fun HoleSettingsScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         MutedText(t("Yalnızca topluluğu yönetenler ayarları değiştirebilir."))
+                        Spacer(Modifier.height(12.dp))
+                        com.delidehset.mobile.ui.components.DeliOutlinedButton(t("Sayfayı uygulamada aç")) {
+                            onOpenWeb("/h/$hole/settings", "/h/$hole")
+                        }
                     }
                     return@Column
                 }
@@ -241,6 +247,13 @@ fun HoleSettingsScreen(
                 ) {
                     vm.save(hole, displayName, blockedIps, blockedWords)
                 }
+
+                com.delidehset.mobile.ui.components.DeliOutlinedButton(
+                    text = t("Sayfayı uygulamada aç"),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    onOpenWeb("/h/$hole/settings", "/h/$hole")
+                }
             }
         }
 
@@ -267,7 +280,22 @@ private fun fieldColors() = TextFieldDefaults.colors(
 /** The community's own picture, or its initial when the site has none. */
 @Composable
 internal fun HoleLogo(url: String?, name: String, size: androidx.compose.ui.unit.Dp = 52.dp) {
-    val model = url?.takeIf { it.isNotBlank() }?.let {
+    val context = LocalContext.current
+    val given = url?.takeIf { !HoleStore.isGenericLogo(it) }
+    var resolved by remember(name, given) {
+        mutableStateOf(given ?: HoleStore.cachedLogo(name))
+    }
+    LaunchedEffect(name, given) {
+        if (given != null) {
+            HoleStore.put(name, logo = given)
+            resolved = given
+            return@LaunchedEffect
+        }
+        val app = context.applicationContext as? com.delidehset.mobile.DeliApp ?: return@LaunchedEffect
+        resolved = HoleStore.remember(app.container.repository, name)
+    }
+
+    val model = resolved?.takeIf { it.isNotBlank() }?.let {
         if (it.startsWith("http")) it else DeliHttp.BASE_URL + it
     }
     if (model != null) {

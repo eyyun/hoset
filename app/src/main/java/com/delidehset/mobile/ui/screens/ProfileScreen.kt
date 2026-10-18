@@ -148,6 +148,10 @@ fun ProfileScreen(
     val coinsLabel = t("Coin")
     val moderationLabel = t("Moderasyon geçmişi")
     val selfName = profile?.name ?: name
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val showHiddenInfo by com.delidehset.mobile.data.HosetPrefs.showHiddenInfoState
+    val mediaDownload by com.delidehset.mobile.data.HosetPrefs.mediaDownloadState
+    var zoomedImageUrl by remember { mutableStateOf<String?>(null) }
     // A profile loading by itself — opening it, changing tab, coming back — must not drop
     // the refresh indicator down: only the pull shows it.
     val pull = rememberManualRefresh(loading || listLoading)
@@ -193,10 +197,14 @@ fun ProfileScreen(
                         // when there is not — the site does the same.
                         val banner = profile.bannerUrl
                         if (banner != null) {
+                            val fullBanner = if (banner.startsWith("http")) banner else DeliHttp.BASE_URL + banner
                             AsyncImage(
-                                model = if (banner.startsWith("http")) banner else DeliHttp.BASE_URL + banner,
+                                model = fullBanner,
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxWidth().height(96.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(96.dp)
+                                    .clickable { zoomedImageUrl = fullBanner },
                                 contentScale = ContentScale.Crop,
                             )
                         } else {
@@ -228,15 +236,25 @@ fun ProfileScreen(
                             ) {
                                 // The ring has to follow the kit like the picture does:
                                 // a square avatar under a round ring spilled out of it.
+                                val rawAvatar = profile.avatarUrl ?: com.delidehset.mobile.data.AvatarStore.cached(selfName)
+                                val fullAvatar = rawAvatar?.let { if (it.startsWith("http")) it else DeliHttp.BASE_URL + it }
                                 DeliAvatar(
                                     url = profile.avatarUrl,
                                     size = 86.dp,
                                     name = selfName,
-                                    modifier = Modifier.border(
-                                        3.dp,
-                                        DeliColors.Surface,
-                                        avatarShape(DeliColors.palette),
-                                    )
+                                    modifier = Modifier
+                                        .border(
+                                            3.dp,
+                                            DeliColors.Surface,
+                                            avatarShape(DeliColors.palette),
+                                        )
+                                        .then(
+                                            if (fullAvatar != null) {
+                                                Modifier.clickable { zoomedImageUrl = fullAvatar }
+                                            } else {
+                                                Modifier
+                                            }
+                                        ),
                                 )
                                 Spacer(Modifier.weight(1f))
                                 if (!isSelf && profile.isFollowing) {
@@ -321,6 +339,15 @@ fun ProfileScreen(
                                 if (!coins.isNullOrBlank() && coins != "0") {
                                     MutedText("·")
                                     MutedText(tf("{0} {1}", coins, coinsLabel.lowercase()))
+                                }
+                                if (showHiddenInfo && profile.truescore != null) {
+                                    MutedText("·")
+                                    Text(
+                                        tf("Truescore: {0}", profile.truescore),
+                                        color = DeliColors.Primary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
                                 }
                             }
 
@@ -592,6 +619,49 @@ fun ProfileScreen(
                 }
             }
         }
+        }
+    }
+
+    zoomedImageUrl?.let { imgUrl ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { zoomedImageUrl = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { zoomedImageUrl = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = imgUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                if (mediaDownload) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 36.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(DeliColors.Primary)
+                            .clickable {
+                                val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    if (ok) com.delidehset.mobile.ui.tr("Görsel indiriliyor…") else com.delidehset.mobile.ui.tr("İndirme başlatılamadı."),
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                            .padding(horizontal = 18.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(t("İndir"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

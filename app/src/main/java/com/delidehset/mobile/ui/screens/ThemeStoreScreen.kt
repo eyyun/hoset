@@ -84,6 +84,7 @@ import com.delidehset.mobile.ui.theme.Palette
 import com.delidehset.mobile.ui.theme.SurfaceEffect
 import com.delidehset.mobile.ui.theme.avatarShape
 import com.delidehset.mobile.ui.theme.controlShape
+import com.delidehset.mobile.ui.theme.kitDetailedDecoration
 import com.delidehset.mobile.ui.theme.kitTraits
 
 /**
@@ -655,140 +656,229 @@ private fun KitPreview(kit: Palette) {
         else -> 0.5f
     }
 
-    Column(
+    val isDetailed = kit.category == KitCategory.DETAILED
+    val accent = if (kit.glowColor != Color.Transparent) kit.glowColor else kit.primary
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(kit.background)
             .border(1.dp, kit.border, shape),
     ) {
-        // Top bar.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(kit.surface)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Menu, contentDescription = null, tint = kit.onBackground, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Hoset", color = kit.onBackground, fontSize = 13.sp, fontWeight = kit.titleWeight)
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.Filled.Search, contentDescription = null, tint = kit.onSurfaceVariant, modifier = Modifier.size(14.dp))
-        }
-        if (kit.cardStyle == CardStyle.OUTLINED) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
-        }
-
-        // The post itself, in the kit's own surface idiom.
-        Column(modifier = Modifier.padding(kit.spacing * 0.6f)) {
-            Column(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Top bar.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(motionModifier)
-                    .then(previewSurface(kit, RoundedCornerShape(kit.cardRadius), glowAlpha))
-                    .padding(kit.spacing * 0.7f),
+                    .background(kit.surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(Icons.Filled.Menu, contentDescription = null, tint = kit.onBackground, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(7.dp))
+                if (isDetailed) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(kit.smallRadius.coerceAtLeast(3.dp)))
+                            .background(kit.primary.copy(alpha = 0.22f))
+                            .border(0.8.dp, kit.primary.copy(alpha = 0.55f), RoundedCornerShape(kit.smallRadius.coerceAtLeast(3.dp))),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(kit.icon, contentDescription = null, tint = kit.primary, modifier = Modifier.size(11.dp))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text("Hoset", color = kit.onBackground, fontSize = 13.sp, fontWeight = kit.titleWeight)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Filled.Search, contentDescription = null, tint = kit.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            }
+            if (isDetailed) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.8.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color.Transparent, accent.copy(alpha = 0.85f), kit.blue.copy(alpha = 0.85f), Color.Transparent)
+                            )
+                        )
+                )
+            } else if (kit.cardStyle == CardStyle.OUTLINED) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
+            }
+
+            // The post itself, in the kit's own surface idiom.
+            Column(modifier = Modifier.padding(kit.spacing * 0.6f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(motionModifier)
+                        .then(previewSurface(kit, RoundedCornerShape(kit.cardRadius), glowAlpha))
+                        .padding(kit.spacing * 0.7f),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PreviewAvatar(kit, size = 22.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("@hoset", color = kit.onBackground, fontSize = 11.sp, fontWeight = kit.titleWeight, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("general · 2 sa", color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(kit.smallRadius))
+                                .background(kit.primaryContainer)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Text("12", color = if (kit.dark) Color.White else kit.onBackground, fontSize = 9.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        text = t("Örnek gönderi"),
+                        color = kit.onBackground,
+                        fontSize = 13.sp,
+                        fontWeight = kit.titleWeight,
+                        letterSpacing = kit.letterSpacing,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = t("Tema önizlemesi"),
+                        color = kit.onSurfaceVariant,
+                        fontSize = 10.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = kit.upvote, modifier = Modifier.size(15.dp))
+                        Text("12", color = kit.upvote, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp))
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = kit.downvote, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(t("Yorumlar"), color = kit.onSurfaceVariant, fontSize = 10.sp)
+                        Text(" 3", color = kit.onSurfaceVariant, fontSize = 10.sp)
+                        Spacer(Modifier.weight(1f))
+                        Box(
+                            modifier = Modifier
+                                .then(previewButton(kit))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(t("Uygula"), color = previewButtonText(kit), fontSize = 9.5.sp, fontWeight = kit.titleWeight)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(kit.spacing * 0.5f))
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PreviewAvatar(kit, size = 22.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(kit.smallRadius))
+                            .background(kit.primary.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(kit.primary))
+                    }
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("@hoset", color = kit.onBackground, fontSize = 11.sp, fontWeight = kit.titleWeight, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("general · 2 sa", color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
+                        Text(t("Uygulama Teması"), color = kit.onBackground, fontSize = 10.5.sp, maxLines = 1)
+                        Text(t(kit.name), color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
                     }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(kit.smallRadius))
-                            .background(kit.primaryContainer)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text("12", color = if (kit.dark) Color.White else kit.onBackground, fontSize = 9.sp)
-                    }
-                }
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    text = t("Örnek gönderi"),
-                    color = kit.onBackground,
-                    fontSize = 13.sp,
-                    fontWeight = kit.titleWeight,
-                    letterSpacing = kit.letterSpacing,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = t("Tema önizlemesi"),
-                    color = kit.onSurfaceVariant,
-                    fontSize = 10.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = kit.upvote, modifier = Modifier.size(15.dp))
-                    Text("12", color = kit.upvote, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp))
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = kit.downvote, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(t("Yorumlar"), color = kit.onSurfaceVariant, fontSize = 10.sp)
-                    Text(" 3", color = kit.onSurfaceVariant, fontSize = 10.sp)
-                    Spacer(Modifier.weight(1f))
-                    Box(
-                        modifier = Modifier
-                            .then(previewButton(kit))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    ) {
-                        Text(t("Uygula"), color = previewButtonText(kit), fontSize = 9.5.sp, fontWeight = kit.titleWeight)
-                    }
+                    Text("›", color = kit.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
 
-            Spacer(Modifier.height(kit.spacing * 0.5f))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isDetailed) {
+                val dockShape = RoundedCornerShape(
+                    when {
+                        kit.cardRadius <= 6.dp -> 6.dp
+                        kit.cardRadius >= 16.dp -> 18.dp
+                        else -> 14.dp
+                    }
+                )
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
-                        .clip(RoundedCornerShape(kit.smallRadius))
-                        .background(kit.primary.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                 ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(kit.primary))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(dockShape)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(kit.surface, kit.surfaceVariant.copy(alpha = 0.9f), kit.surface)
+                                )
+                            )
+                            .border(1.dp, accent.copy(alpha = 0.5f), dockShape)
+                            .padding(vertical = 5.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        PreviewTab(kit, Icons.Filled.Home, t("Feed"), active = true, detailed = true)
+                        PreviewTab(kit, Icons.Filled.Groups, t("Topluluklar"), active = false, detailed = true)
+                        PreviewTab(kit, Icons.Filled.Forum, t("Sohbet"), active = false, detailed = true)
+                        PreviewTab(kit, Icons.Filled.Person, t("Profil"), active = false, detailed = true)
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(t("Uygulama Teması"), color = kit.onBackground, fontSize = 10.5.sp, maxLines = 1)
-                    Text(t(kit.name), color = kit.onSurfaceVariant, fontSize = 9.sp, maxLines = 1)
+            } else {
+                if (kit.cardStyle == CardStyle.OUTLINED) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
                 }
-                Text("›", color = kit.onSurfaceVariant, fontSize = 12.sp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(kit.surface)
+                        .padding(vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    PreviewTab(kit, Icons.Filled.Home, t("Feed"), active = true)
+                    PreviewTab(kit, Icons.Filled.Groups, t("Topluluklar"), active = false)
+                    PreviewTab(kit, Icons.Filled.Forum, t("Sohbet"), active = false)
+                    PreviewTab(kit, Icons.Filled.Person, t("Profil"), active = false)
+                }
             }
         }
-
-        if (kit.cardStyle == CardStyle.OUTLINED) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(kit.border))
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(kit.surface)
-                .padding(vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            PreviewTab(kit, Icons.Filled.Home, t("Feed"), active = true)
-            PreviewTab(kit, Icons.Filled.Groups, t("Topluluklar"), active = false)
-            PreviewTab(kit, Icons.Filled.Forum, t("Sohbet"), active = false)
-            PreviewTab(kit, Icons.Filled.Person, t("Profil"), active = false)
+        if (isDetailed) {
+            com.delidehset.mobile.ui.DetailedAmbientOverlay(
+                palette = kit,
+                modifier = Modifier.matchParentSize(),
+            )
         }
     }
 }
 
 @Composable
-private fun PreviewTab(kit: Palette, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean) {
-    val tint = if (active) kit.primary else kit.onSurfaceVariant
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun PreviewTab(
+    kit: Palette,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    detailed: Boolean = false,
+) {
+    val accent = if (kit.glowColor != Color.Transparent) kit.glowColor else kit.primary
+    val tint = if (active) accent else kit.onSurfaceVariant
+    val tabShape = RoundedCornerShape(kit.smallRadius.coerceAtLeast(4.dp))
+    Column(
+        modifier = if (detailed && active) {
+            Modifier
+                .clip(tabShape)
+                .background(accent.copy(alpha = 0.18f))
+                .border(0.8.dp, accent.copy(alpha = 0.45f), tabShape)
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        } else {
+            Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
         Spacer(Modifier.height(2.dp))
-        Text(label, color = tint, fontSize = 8.5.sp)
+        Text(label, color = if (active && detailed) kit.onBackground else tint, fontSize = 8.5.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
@@ -823,6 +913,7 @@ private fun previewSurface(kit: Palette, shape: Shape, glowAlpha: Float = 0.5f):
             modifier = modifier.clip(shape).background(kit.surface)
         }
     }
+    modifier = modifier.kitDetailedDecoration(kit, glowAlpha = glowAlpha)
     val glowTint = if (kit.glowColor != Color.Transparent) kit.glowColor else kit.primary
     when {
         kit.surfaceEffect == SurfaceEffect.NEON_BORDER -> {

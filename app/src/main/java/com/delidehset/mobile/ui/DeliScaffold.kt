@@ -1,7 +1,16 @@
 package com.delidehset.mobile.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,7 +74,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -80,8 +96,14 @@ import com.delidehset.mobile.ui.nav.Routes
 import com.delidehset.mobile.ui.nav.drawerItems
 import com.delidehset.mobile.ui.nav.drawerSections
 import com.delidehset.mobile.ui.theme.DeliColors
-import kotlinx.coroutines.launch
 import com.delidehset.mobile.ui.theme.DeliShapes
+import com.delidehset.mobile.ui.theme.KitCategory
+import com.delidehset.mobile.ui.theme.KitMotion
+import com.delidehset.mobile.ui.theme.Palette
+import com.delidehset.mobile.ui.theme.kitDetailedDecoration
+import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -109,6 +131,8 @@ fun DeliScaffold(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val palette = DeliColors.palette
+    val isDetailed = palette.category == KitCategory.DETAILED
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -140,164 +164,210 @@ fun DeliScaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = floatingActionButton,
             topBar = {
-                TopAppBar(
-                    modifier = Modifier.statusBarsPadding(),
-                    title = {
-                        Text(
-                            text = translate(lang, title),
-                            color = DeliColors.OnBackground,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                        )
-                    },
-                    navigationIcon = {
-                        if (showBack) {
-                            // A real icon rather than a text arrow: the glyph used to sit
-                            // off-centre in its touch target and read as a stray dash.
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = translate(lang, "Geri"),
-                                    tint = DeliColors.OnBackground,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            }
-                        } else {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(
-                                    Icons.Filled.Menu,
-                                    contentDescription = translate(lang, "Menü"),
-                                    tint = DeliColors.OnBackground,
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        // Search moved out of the bottom bar (that slot is the room now),
-                        // and the top bar is where every other app keeps it.
-                        if (currentRoute != Routes.SEARCH) {
-                            IconButton(onClick = { onNavigate(Routes.SEARCH) }) {
-                                Icon(
-                                    Icons.Filled.Search,
-                                    contentDescription = translate(lang, "Ara"),
-                                    tint = DeliColors.OnBackground,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            }
-                        }
-                        if (onOpenNotifications != null) {
-                            IconButton(onClick = onOpenNotifications) {
-                                BadgedBox(
-                                    badge = {
-                                        if (unreadNotifications > 0) {
-                                            Badge(containerColor = DeliColors.Danger) {
-                                                Text(
-                                                    text = if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
-                                                    fontSize = 9.sp,
+                Column {
+                    TopAppBar(
+                        modifier = Modifier.statusBarsPadding(),
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isDetailed) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(RoundedCornerShape(palette.smallRadius.coerceAtLeast(4.dp)))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        palette.primary.copy(alpha = 0.25f),
+                                                        palette.blue.copy(alpha = 0.15f),
+                                                    )
                                                 )
-                                            }
-                                        }
-                                    },
-                                ) {
+                                            )
+                                            .border(
+                                                1.dp,
+                                                palette.primary.copy(alpha = 0.55f),
+                                                RoundedCornerShape(palette.smallRadius.coerceAtLeast(4.dp)),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = palette.icon,
+                                            contentDescription = null,
+                                            tint = palette.primary,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.width(9.dp))
+                                }
+                                Text(
+                                    text = translate(lang, title),
+                                    color = DeliColors.OnBackground,
+                                    fontSize = 17.sp,
+                                    fontWeight = if (isDetailed) palette.titleWeight else FontWeight.SemiBold,
+                                    letterSpacing = if (isDetailed) palette.letterSpacing else 0.sp,
+                                    maxLines = 1,
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            if (showBack) {
+                                IconButton(onClick = onBack) {
                                     Icon(
-                                        Icons.Filled.Notifications,
-                                        contentDescription = translate(lang, "Bildirimler"),
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = translate(lang, "Geri"),
+                                        tint = DeliColors.OnBackground,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                            } else {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(
+                                        Icons.Filled.Menu,
+                                        contentDescription = translate(lang, "Menü"),
+                                        tint = DeliColors.OnBackground,
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            if (currentRoute != Routes.SEARCH) {
+                                IconButton(onClick = { onNavigate(Routes.SEARCH) }) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = translate(lang, "Ara"),
                                         tint = DeliColors.OnBackground,
                                         modifier = Modifier.size(22.dp),
                                     )
                                 }
                             }
-                        }
-                        if (onOpenSettings != null) {
-                            IconButton(onClick = onOpenSettings) {
-                                Icon(
-                                    Icons.Filled.Settings,
-                                    contentDescription = translate(lang, "Ayarlar"),
-                                    tint = DeliColors.OnBackground,
-                                    modifier = Modifier.size(22.dp),
-                                )
+                            if (onOpenNotifications != null) {
+                                IconButton(onClick = onOpenNotifications) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (unreadNotifications > 0) {
+                                                Badge(containerColor = DeliColors.Danger) {
+                                                    Text(
+                                                        text = if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
+                                                        fontSize = 9.sp,
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Notifications,
+                                            contentDescription = translate(lang, "Bildirimler"),
+                                            tint = DeliColors.OnBackground,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                }
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = DeliColors.Surface),
-                )
-                // Kits that line their surfaces up carry a hairline under the bar; the
-                // ones that separate with air leave it out.
-                if (DeliColors.palette.dividers) {
-                    HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
+                            if (onOpenSettings != null) {
+                                IconButton(onClick = onOpenSettings) {
+                                    Icon(
+                                        Icons.Filled.Settings,
+                                        contentDescription = translate(lang, "Ayarlar"),
+                                        tint = DeliColors.OnBackground,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = DeliColors.Surface),
+                    )
+                    if (isDetailed) {
+                        val accent = if (palette.glowColor != Color.Transparent) palette.glowColor else palette.primary
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            accent.copy(alpha = 0.85f),
+                                            palette.blue.copy(alpha = 0.85f),
+                                            accent.copy(alpha = 0.85f),
+                                            Color.Transparent,
+                                        )
+                                    )
+                                )
+                        )
+                    } else if (DeliColors.palette.dividers) {
+                        HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
+                    }
                 }
             },
             bottomBar = {
-                // The bar is fixed: it neither disappears nor jumps up over the keyboard,
-                // which is what every app of this shape does. The keyboard simply covers
-                // it, and the content above (see the padding below) is lifted instead.
-                Column(modifier = Modifier.navigationBarsPadding()) {
-                if (DeliColors.palette.dividers) {
-                    HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
-                }
-                NavigationBar(
-                    modifier = Modifier,
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    containerColor = DeliColors.Surface,
-                    contentColor = DeliColors.OnBackground,
-                ) {
-                    NavigationBarItem(
-                        selected = currentRoute.startsWith(Routes.FEED),
-                        onClick = { onNavigate(Routes.FEED) },
-                        icon = { Icon(Icons.Filled.Home, contentDescription = translate(lang, "Feed")) },
-                        label = { Text(translate(lang, "Feed"), fontSize = 11.sp) },
+                val chatRoute = Routes.page("chat")
+                val ownProfile = viewer.username?.let { Routes.user(it) }
+                if (isDetailed) {
+                    DetailedBottomDock(
+                        palette = palette,
+                        viewer = viewer,
+                        lang = lang,
+                        currentRoute = currentRoute,
+                        chatRoute = chatRoute,
+                        ownProfile = ownProfile,
+                        onNavigate = onNavigate,
                     )
-                    NavigationBarItem(
-                        selected = currentRoute == Routes.HOLES,
-                        onClick = { onNavigate(Routes.HOLES) },
-                        icon = { Icon(Icons.Filled.Groups, contentDescription = translate(lang, "Topluluklar")) },
-                        label = { Text(translate(lang, "Topluluklar"), fontSize = 11.sp) },
-                    )
-                    // The room takes the middle slot: it is the one thing you come back to
-                    // all day, and the site's own mobile bar leads with it too.
-                    val chatRoute = Routes.page("chat")
-                    NavigationBarItem(
-                        selected = currentRoute == chatRoute,
-                        onClick = {
-                            if (viewer.isSignedIn) onNavigate(chatRoute) else onNavigate(Routes.LOGIN)
-                        },
-                        icon = { Icon(Icons.Filled.Forum, contentDescription = translate(lang, "Sohbet")) },
-                        label = { Text(translate(lang, "Sohbet"), fontSize = 11.sp) },
-                    )
-                    // The tab opens the viewer's own profile, the way a profile tab is
-                    // expected to behave; settings are one tap further in (from the
-                    // profile hero, or the drawer's "Ayarlar").
-                    val ownProfile = viewer.username?.let { Routes.user(it) }
-                    NavigationBarItem(
-                        selected = currentRoute == ownProfile ||
-                            currentRoute == Routes.SETTINGS ||
-                            currentRoute == Routes.LOGIN,
-                        onClick = {
-                            if (ownProfile != null) onNavigate(ownProfile) else onNavigate(Routes.LOGIN)
-                        },
-                        icon = {
-                            if (viewer.isSignedIn) {
-                                DeliAvatar(url = viewer.avatarUrl, size = 24.dp, name = viewer.username)
-                            } else {
-                                Icon(Icons.Filled.Person, contentDescription = translate(lang, "Profil"))
-                            }
-                        },
-                        label = {
-                            Text(
-                                translate(lang, if (viewer.isSignedIn) "Profil" else "Giriş"),
-                                fontSize = 11.sp,
+                } else {
+                    Column(modifier = Modifier.navigationBarsPadding()) {
+                        if (DeliColors.palette.dividers) {
+                            HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
+                        }
+                        NavigationBar(
+                            modifier = Modifier,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            containerColor = DeliColors.Surface,
+                            contentColor = DeliColors.OnBackground,
+                        ) {
+                            NavigationBarItem(
+                                selected = currentRoute.startsWith(Routes.FEED),
+                                onClick = { onNavigate(Routes.FEED) },
+                                icon = { Icon(Icons.Filled.Home, contentDescription = translate(lang, "Feed")) },
+                                label = { Text(translate(lang, "Feed"), fontSize = 11.sp) },
                             )
-                        },
-                    )
-                }
+                            NavigationBarItem(
+                                selected = currentRoute == Routes.HOLES,
+                                onClick = { onNavigate(Routes.HOLES) },
+                                icon = { Icon(Icons.Filled.Groups, contentDescription = translate(lang, "Topluluklar")) },
+                                label = { Text(translate(lang, "Topluluklar"), fontSize = 11.sp) },
+                            )
+                            NavigationBarItem(
+                                selected = currentRoute == chatRoute,
+                                onClick = {
+                                    if (viewer.isSignedIn) onNavigate(chatRoute) else onNavigate(Routes.LOGIN)
+                                },
+                                icon = { Icon(Icons.Filled.Forum, contentDescription = translate(lang, "Sohbet")) },
+                                label = { Text(translate(lang, "Sohbet"), fontSize = 11.sp) },
+                            )
+                            NavigationBarItem(
+                                selected = currentRoute == ownProfile ||
+                                    currentRoute == Routes.SETTINGS ||
+                                    currentRoute == Routes.LOGIN,
+                                onClick = {
+                                    if (ownProfile != null) onNavigate(ownProfile) else onNavigate(Routes.LOGIN)
+                                },
+                                icon = {
+                                    if (viewer.isSignedIn) {
+                                        DeliAvatar(url = viewer.avatarUrl, size = 24.dp, name = viewer.username)
+                                    } else {
+                                        Icon(Icons.Filled.Person, contentDescription = translate(lang, "Profil"))
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        translate(lang, if (viewer.isSignedIn) "Profil" else "Giriş"),
+                                        fontSize = 11.sp,
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
             },
         ) { padding ->
-            // Edge to edge means the window is not resized for the keyboard. While the
-            // keyboard is up the content is lifted by exactly the keyboard's height — not
-            // by the keyboard *plus* the bar, which is what left a strip of empty space
-            // between a composer and the keyboard.
             val density = LocalDensity.current
             val fontScale = com.delidehset.mobile.data.HosetPrefs.fontScaleState.floatValue
             val scaledDensity = androidx.compose.ui.unit.Density(
@@ -314,14 +384,334 @@ fun DeliScaffold(
                 padding
             }
             Box(modifier = Modifier.fillMaxSize()) {
-                // Every screen is written in Turkish and reads its lines through `t`, which
-                // resolves them against the language picked in Ayarlar.
                 CompositionLocalProvider(
                     LocalAppLang provides lang,
                     LocalDensity provides scaledDensity,
                 ) {
                     content(contentPadding)
                 }
+                if (isDetailed) {
+                    DetailedAmbientOverlay(palette = palette)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Floating glass/cyber capsule dock used exclusively by [KitCategory.DETAILED] themes
+ * so switching from a Simple theme to a Detailed theme transforms the app's navigation chrome.
+ */
+@Composable
+private fun DetailedBottomDock(
+    palette: Palette,
+    viewer: Viewer,
+    lang: AppLang,
+    currentRoute: String,
+    chatRoute: String,
+    ownProfile: String?,
+    onNavigate: (String) -> Unit,
+) {
+    val dockShape = RoundedCornerShape(
+        when {
+            palette.cardRadius <= 6.dp -> 8.dp
+            palette.cardRadius >= 16.dp -> 26.dp
+            else -> 20.dp
+        }
+    )
+    val accent = if (palette.glowColor != Color.Transparent) palette.glowColor else palette.primary
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 14.dp,
+                    shape = dockShape,
+                    ambientColor = accent.copy(alpha = 0.45f),
+                    spotColor = accent.copy(alpha = 0.55f),
+                )
+                .clip(dockShape)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            palette.surface,
+                            palette.surfaceVariant.copy(alpha = 0.92f),
+                            palette.surface,
+                        )
+                    )
+                )
+                .kitDetailedDecoration(palette, glowAlpha = 0.85f)
+                .border(1.2.dp, accent.copy(alpha = 0.5f), dockShape)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DetailedDockItem(
+                palette = palette,
+                selected = currentRoute.startsWith(Routes.FEED),
+                label = translate(lang, "Feed"),
+                onClick = { onNavigate(Routes.FEED) },
+                icon = { tint -> Icon(Icons.Filled.Home, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) },
+                modifier = Modifier.weight(1f),
+            )
+            DetailedDockItem(
+                palette = palette,
+                selected = currentRoute == Routes.HOLES,
+                label = translate(lang, "Topluluklar"),
+                onClick = { onNavigate(Routes.HOLES) },
+                icon = { tint -> Icon(Icons.Filled.Groups, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) },
+                modifier = Modifier.weight(1f),
+            )
+            DetailedDockItem(
+                palette = palette,
+                selected = currentRoute == chatRoute,
+                label = translate(lang, "Sohbet"),
+                onClick = {
+                    if (viewer.isSignedIn) onNavigate(chatRoute) else onNavigate(Routes.LOGIN)
+                },
+                icon = { tint -> Icon(Icons.Filled.Forum, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) },
+                modifier = Modifier.weight(1f),
+            )
+            val profileSelected = currentRoute == ownProfile ||
+                currentRoute == Routes.SETTINGS ||
+                currentRoute == Routes.LOGIN
+            DetailedDockItem(
+                palette = palette,
+                selected = profileSelected,
+                label = translate(lang, if (viewer.isSignedIn) "Profil" else "Giriş"),
+                onClick = {
+                    if (ownProfile != null) onNavigate(ownProfile) else onNavigate(Routes.LOGIN)
+                },
+                icon = { tint ->
+                    if (viewer.isSignedIn) {
+                        DeliAvatar(url = viewer.avatarUrl, size = 22.dp, name = viewer.username)
+                    } else {
+                        Icon(Icons.Filled.Person, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailedDockItem(
+    palette: Palette,
+    selected: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = if (palette.glowColor != Color.Transparent) palette.glowColor else palette.primary
+    val itemShape = RoundedCornerShape(palette.controlRadius.coerceAtLeast(6.dp))
+    val tint = if (selected) accent else palette.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .padding(horizontal = 3.dp)
+            .clip(itemShape)
+            .background(
+                if (selected) {
+                    Brush.verticalGradient(
+                        listOf(
+                            accent.copy(alpha = 0.22f),
+                            palette.primaryContainer.copy(alpha = 0.35f),
+                        )
+                    )
+                } else {
+                    Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
+                }
+            )
+            .then(
+                if (selected) Modifier.border(1.dp, accent.copy(alpha = 0.45f), itemShape)
+                else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .width(16.dp)
+                    .height(2.5.dp)
+                    .clip(CircleShape)
+                    .background(accent)
+            )
+            Spacer(Modifier.height(3.dp))
+        } else {
+            Spacer(Modifier.height(5.5.dp))
+        }
+        icon(tint)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            color = if (selected) palette.onBackground else palette.onSurfaceVariant,
+            fontSize = 10.5.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * Live non-interactive atmospheric canvas overlay for [KitCategory.DETAILED] kits.
+ * Touch events pass straight through to the underlying screen.
+ */
+@Composable
+fun DetailedAmbientOverlay(
+    palette: Palette,
+    modifier: Modifier = Modifier.fillMaxSize(),
+) {
+    val transition = rememberInfiniteTransition(label = "detailed_ambient")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 9000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "ambient_phase",
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "ambient_pulse",
+    )
+    val accent = if (palette.glowColor != Color.Transparent) palette.glowColor else palette.primary
+
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val twoPi = (Math.PI * 2.0).toFloat()
+
+        when (palette.motion) {
+            KitMotion.NEON -> {
+                // Perspective cyber grid along top/bottom + sweeping scanline beam
+                val gridColor = accent.copy(alpha = 0.07f)
+                val cols = 8
+                for (i in 1 until cols) {
+                    val x = w * i / cols
+                    drawLine(gridColor, Offset(x, 0f), Offset(x, h * 0.14f), strokeWidth = 1f)
+                    drawLine(gridColor, Offset(x, h * 0.86f), Offset(x, h), strokeWidth = 1f)
+                }
+                // Sweeping neon laser scanline
+                val scanY = h * phase
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, accent.copy(alpha = 0.10f), Color.Transparent),
+                        startY = (scanY - 36.dp.toPx()).coerceAtLeast(0f),
+                        endY = (scanY + 36.dp.toPx()).coerceAtMost(h),
+                    ),
+                    topLeft = Offset(0f, (scanY - 36.dp.toPx()).coerceAtLeast(0f)),
+                    size = Size(w, 72.dp.toPx()),
+                )
+                // Side HUD edge rails
+                val railLen = 64.dp.toPx()
+                val railY = h * 0.35f
+                drawLine(accent.copy(alpha = 0.35f * pulse), Offset(2.dp.toPx(), railY), Offset(2.dp.toPx(), railY + railLen), strokeWidth = 2.dp.toPx())
+                drawLine(palette.blue.copy(alpha = 0.35f * pulse), Offset(w - 2.dp.toPx(), railY), Offset(w - 2.dp.toPx(), railY + railLen), strokeWidth = 2.dp.toPx())
+            }
+            KitMotion.PULSE -> {
+                // Breathing aurora spotlight orbs in top-right and bottom-left
+                val r1 = w * 0.65f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = 0.12f * pulse), Color.Transparent),
+                        center = Offset(w * 0.88f, h * 0.12f),
+                        radius = r1,
+                    ),
+                    radius = r1,
+                    center = Offset(w * 0.88f, h * 0.12f),
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(palette.blue.copy(alpha = 0.10f * (1.35f - pulse)), Color.Transparent),
+                        center = Offset(w * 0.12f, h * 0.85f),
+                        radius = r1 * 0.85f,
+                    ),
+                    radius = r1 * 0.85f,
+                    center = Offset(w * 0.12f, h * 0.85f),
+                )
+            }
+            KitMotion.FLOAT -> {
+                // Drifting snow / stardust particles
+                val count = 18
+                for (i in 0 until count) {
+                    val seedX = ((i * 37 + 13) % 100) / 100f
+                    val seedY = ((i * 61 + 29) % 100) / 100f
+                    val yPos = ((seedY + phase) % 1f) * h
+                    val xPos = (seedX * w + sin(phase * twoPi + i) * 14.dp.toPx()).coerceIn(0f, w)
+                    val radius = (1.5f + (i % 3) * 1.1f).dp.toPx()
+                    val dotColor = if (i % 2 == 0) accent.copy(alpha = 0.18f * pulse) else Color.White.copy(alpha = if (palette.dark) 0.15f else 0.35f)
+                    drawCircle(dotColor, radius = radius, center = Offset(xPos, yPos))
+                }
+            }
+            KitMotion.RIPPLE -> {
+                // Flowing sine wave aurora ribbons near top and bottom
+                for (layer in 0..2) {
+                    val path = Path()
+                    val baseY = h * (0.14f + layer * 0.04f)
+                    path.moveTo(0f, baseY)
+                    val segs = 32
+                    for (s in 1..segs) {
+                        val x = w * s / segs
+                        val wy = baseY + sin(s * 0.35f + phase * twoPi + layer) * 10.dp.toPx()
+                        path.lineTo(x, wy)
+                    }
+                    drawPath(
+                        path = path,
+                        color = accent.copy(alpha = 0.08f - layer * 0.02f),
+                        style = Stroke(width = 1.5.dp.toPx()),
+                    )
+                }
+            }
+            KitMotion.SHIFT -> {
+                // Slowly orbiting ambient color mesh
+                val cx = w * (0.5f + 0.32f * cos(phase * twoPi))
+                val cy = h * (0.28f + 0.18f * sin(phase * twoPi))
+                val r = w * 0.55f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
+                        center = Offset(cx, cy),
+                        radius = r,
+                    ),
+                    radius = r,
+                    center = Offset(cx, cy),
+                )
+            }
+            KitMotion.BOUNCE -> {
+                // Rising playful bokeh bubbles
+                val bubbles = 10
+                for (i in 0 until bubbles) {
+                    val bx = (((i * 43 + 17) % 100) / 100f) * w
+                    val by = (1f - ((i * 29 / 100f + phase) % 1f)) * h
+                    val br = (8 + (i % 4) * 6).dp.toPx()
+                    val bColor = if (i % 2 == 0) accent.copy(alpha = 0.065f) else palette.upvote.copy(alpha = 0.055f)
+                    drawCircle(bColor, radius = br, center = Offset(bx, by))
+                }
+            }
+            KitMotion.NONE -> {
+                // Subtle editorial double frame around screen edges
+                val m = 4.dp.toPx()
+                drawRect(
+                    color = palette.primary.copy(alpha = 0.10f),
+                    topLeft = Offset(m, m),
+                    size = Size((w - m * 2).coerceAtLeast(0f), (h - m * 2).coerceAtLeast(0f)),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
             }
         }
     }

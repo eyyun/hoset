@@ -135,6 +135,7 @@ class DeliRepository(
         runCatching { http.get("/logout") }
         cookies.clear()
         session.clear()
+        ProfileStore.clear()
     }
 
     /* ------------------------------------------------------------------ */
@@ -182,7 +183,12 @@ class DeliRepository(
     }
 
     private fun decodeFeed(body: String): FeedResponse =
-        json.decodeFromString(FeedResponse.serializer(), body)
+        json.decodeFromString(FeedResponse.serializer(), body).also { resp ->
+            for (post in resp.posts) {
+                AvatarStore.put(post.authorName, post.authorAvatar)
+                HoleStore.put(post.hole, logo = post.holeLogo, label = post.holeLabel)
+            }
+        }
 
     /**
      * Warms the cache for the first few posts of a feed so tapping one opens instantly.
@@ -236,15 +242,15 @@ class DeliRepository(
         val doc = HtmlParser.document(html)
         http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
 
-        val post = HtmlParser.parsePost(html, permalink)
+        val post = HtmlParser.parsePost(doc, permalink, html)
             ?: throw DeliException("Gönderi sayfası beklenen biçimde gelmedi; site güncellenmiş olabilir.")
 
         return PostPage(
             post = post,
-            comments = HtmlParser.parseComments(html),
-            commentVotes = HtmlParser.commentVotes(html),
-            commentForm = HtmlParser.parseForm(html, "form[data-comment-form]")
-                ?: HtmlParser.parseForm(html, "form[action^=/comment]"),
+            comments = HtmlParser.parseComments(doc),
+            commentVotes = HtmlParser.commentVotes(doc),
+            commentForm = HtmlParser.parseForm(doc, "form[data-comment-form]")
+                ?: HtmlParser.parseForm(doc, "form[action^=/comment]"),
             html = html,
         )
     }
@@ -309,8 +315,8 @@ class DeliRepository(
         val res = http.get("/submit")
         val doc = HtmlParser.document(res.body)
         http.updateAntiforgery(HtmlParser.antiforgeryToken(doc))
-        return HtmlParser.parseForm(res.body, "form#submitform")
-            ?: HtmlParser.parseForm(res.body, "form[action^=/submit]")
+        return HtmlParser.parseForm(doc, "form#submitform")
+            ?: HtmlParser.parseForm(doc, "form[action^=/submit]")
     }
 
     /* ------------------------------------------------------------------ */
@@ -495,13 +501,38 @@ class DeliRepository(
         return interpret(res, tr("Topluluk"))
     }
 
+    /** Synchronous in-memory / disk-cache lookup so switching profile tabs is instant. */
+    fun cachedUserPosts(name: String): List<FeedPost>? {
+        ProfileStore.cachedPosts(name)?.let { return it }
+        val raw = cache.read("page:/@$name/posts")?.body ?: return null
+        return runCatching { HtmlParser.parseUserPosts(raw) }.getOrNull()?.also {
+            ProfileStore.putPosts(name, it)
+        }
+    }
+
+    fun cachedUserComments(name: String): List<UserComment>? {
+        ProfileStore.cachedComments(name)?.let { return it }
+        val raw = cache.read("page:/@$name/comments")?.body ?: return null
+        return runCatching { HtmlParser.parseUserComments(raw) }.getOrNull()?.also {
+            ProfileStore.putComments(name, it)
+        }
+    }
+
     /** A profile's Posts tab, read from its own page so the list stays in the app. */
-    suspend fun userPosts(name: String, force: Boolean = false): List<FeedPost> =
-        HtmlParser.parseUserPosts(page("/@$name/posts", force = force))
+    suspend fun userPosts(name: String, force: Boolean = false): List<FeedPost> {
+        if (!force) ProfileStore.cachedPosts(name)?.let { return it }
+        return HtmlParser.parseUserPosts(page("/@$name/posts", force = force)).also {
+            ProfileStore.putPosts(name, it)
+        }
+    }
 
     /** A profile's Comments tab, same idea: the page is the only source the site offers. */
-    suspend fun userComments(name: String, force: Boolean = false): List<UserComment> =
-        HtmlParser.parseUserComments(page("/@$name/comments", force = force))
+    suspend fun userComments(name: String, force: Boolean = false): List<UserComment> {
+        if (!force) ProfileStore.cachedComments(name)?.let { return it }
+        return HtmlParser.parseUserComments(page("/@$name/comments", force = force)).also {
+            ProfileStore.putComments(name, it)
+        }
+    }
 
     /**
      * `/notifications`, as the site renders it.
@@ -692,6 +723,20 @@ class DeliRepository(
     suspend fun holes(force: Boolean = false): List<Hole> =
         HtmlParser.parseHoles(page("/holes", force))
 
+    suspend fun createHole(
+        name: String,
+        displayName: String = "",
+        shortDescription: String = "",
+    ): ActionResult {
+        ensureAntiforgery()
+        val fields = mutableListOf("name" to name.trim())
+        if (displayName.isNotBlank()) fields += "display_name" to displayName.trim()
+        if (shortDescription.isNotBlank()) fields += "short_description" to shortDescription.trim()
+        val res = http.postMultipart("/create_hole", fields, referer = "/holes")
+        cache.clear()
+        return interpret(res, tr("Topluluk"))
+    }
+
     suspend fun holeInfo(name: String, force: Boolean = false): Hole? =
         HtmlParser.parseHoleHeader(page("/h/$name", force))
 
@@ -710,10 +755,13 @@ class DeliRepository(
         if (name.isBlank()) return null
         var cursor: String? = null
         var total = 0
-        repeat(HOLE_COUNT_PAGES) {
+        repeat(HOLE_COUNT_PAGES) { pageIdx ->
             val page = runCatching {
                 feed(FeedSort.NEW, hole = name, cursor = cursor)
             }.getOrNull() ?: return null
+            if (pageIdx == 0 && page.posts.isEmpty() && HoleStore.cachedLogo(name) == null) {
+                runCatching { holeState(name) }
+            }
             total += page.posts.size
             cursor = page.nextCursor?.takeIf { it.isNotBlank() }
             if (cursor == null || page.posts.isEmpty()) return total
@@ -767,6 +815,19 @@ class DeliRepository(
         HtmlParser.parseUsers(page(path, force))
 
     /**
+     * Returns a previously parsed [UserProfile] immediately from memory (or from the disk
+     * HTML cache on a cold start) so [com.delidehset.mobile.ui.screens.ProfileScreen]
+     * renders on the very first frame without showing a loading spinner.
+     */
+    fun cachedProfile(name: String): UserProfile? {
+        ProfileStore.cachedProfile(name)?.let { return it }
+        val raw = cache.read("page:/@$name")?.body ?: return null
+        return runCatching { HtmlParser.parseProfile(raw, name) }.getOrNull()?.also {
+            ProfileStore.putProfile(name, it)
+        }
+    }
+
+    /**
      * A profile, with the counters the site's own header gets wrong.
      *
      * Following somebody leaves the profile header still saying "follows 0 users" — the
@@ -776,19 +837,36 @@ class DeliRepository(
      * any other page, and the profile still renders even if they fail.
      */
     suspend fun profile(name: String, force: Boolean = false): UserProfile = coroutineScope {
-        val profile = async { HtmlParser.parseProfile(page("/@$name", force), name) }
+        if (!force) {
+            ProfileStore.cachedProfile(name)?.let { return@coroutineScope it }
+        }
+        val profile = async {
+            HtmlParser.parseProfile(page("/@$name", force), name).also {
+                // Make the main profile available in memory even before follower counts finish.
+                ProfileStore.putProfile(name, it)
+            }
+        }
         val followers = async {
             runCatching { HtmlParser.parseRelationTotal(page("/@$name/followers", force)) }.getOrNull()
         }
         val following = async {
             runCatching { HtmlParser.parseRelationTotal(page("/@$name/following", force)) }.getOrNull()
         }
+        val apiInfo = async {
+            runCatching {
+                val res = http.get("/api/profile/${encodeSegment(name)}")
+                if (res.isSuccess) org.json.JSONObject(res.body) else null
+            }.getOrNull()
+        }
         val parsed = profile.await()
-        val honestFollowers = followers.await() ?: parsed.followers
+        val apiJson = apiInfo.await()
+        val honestFollowers = followers.await() ?: apiJson?.optInt("follower_count")?.takeIf { apiJson.has("follower_count") } ?: parsed.followers
         val honestFollowing = following.await() ?: parsed.following
+        val truescore = apiJson?.takeIf { it.has("truescore") }?.optInt("truescore") ?: parsed.truescore
         parsed.copy(
             followers = honestFollowers,
             following = honestFollowing,
+            truescore = truescore,
             // The `stats` rows are read off the same header as the counters, so they carry
             // the site's own wrong numbers — the header says "follows 0 users" while the
             // list behind it is a page long. They are rewritten to the numbers above, or a
@@ -805,7 +883,9 @@ class DeliRepository(
                     else -> stat
                 }
             },
-        )
+        ).also {
+            ProfileStore.putProfile(name, it)
+        }
     }
 
     /* ------------------------------------------------------------------ */

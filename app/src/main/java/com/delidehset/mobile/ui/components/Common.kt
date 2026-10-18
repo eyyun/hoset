@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -277,17 +278,30 @@ private fun InitialAvatar(
  * The fill, the hairline, the lift and the padding all come from the kit in force, so a
  * list is drawn in that kit's idiom rather than in one fixed one.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun DeliCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    onDoubleClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val clickMod = when {
+        onDoubleClick != null || onLongClick != null ->
+            Modifier.combinedClickable(
+                onClick = { onClick?.invoke() },
+                onDoubleClick = onDoubleClick,
+                onLongClick = onLongClick,
+            )
+        onClick != null -> Modifier.clickable { onClick() }
+        else -> Modifier
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
             .kitSurface()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(clickMod)
     ) {
         Column { content() }
     }
@@ -366,7 +380,7 @@ fun VoteArrows(
     onVote: (Int) -> Unit,
     compact: Boolean = false,
 ) {
-    val size = if (compact) 20.dp else 26.dp
+    val size = if (compact) 20.dp else 25.dp
     Row(verticalAlignment = Alignment.CenterVertically) {
         VoteArrow(
             up = true,
@@ -377,13 +391,13 @@ fun VoteArrows(
         )
         Text(
             text = score?.toString() ?: "–",
-            color = when (viewerVote) {
-                1 -> DeliColors.Upvote
-                -1 -> DeliColors.Downvote
+            color = when {
+                viewerVote > 0 -> DeliColors.Upvote
+                viewerVote < 0 -> DeliColors.Downvote
                 else -> DeliColors.OnSurfaceVariant
             },
             fontSize = if (compact) 12.sp else 14.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = if (viewerVote != 0) FontWeight.ExtraBold else FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         VoteArrow(
@@ -396,7 +410,7 @@ fun VoteArrows(
     }
 }
 
-/** One arrow of [VoteArrows]: filled while it is the vote in force, dimmed without a session. */
+/** One arrow of [VoteArrows]: solid colour and slightly thicker stroke when active, no circle background. */
 @Composable
 private fun VoteArrow(
     up: Boolean,
@@ -406,36 +420,41 @@ private fun VoteArrow(
     onClick: () -> Unit,
 ) {
     val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
-    // A disc behind the arrow is not this app's shape: the vote is told by the arrow alone.
-    // The one kit that draws flat panels ("düz") is the exception — there a circle arrives
-    // with the vote, drawn plainly rather than with a spring, so the touch still reads as
-    // an answer. The arrow itself never moves: it only turns the vote's colour.
-    val circled = DeliColors.palette.cardStyle == CardStyle.FLAT
-    val disc by animateFloatAsState(
-        targetValue = if (active && circled) 1f else 0f,
-        animationSpec = tween(durationMillis = 140),
-        label = "vote-disc",
-    )
+    val tint = when {
+        active -> accent
+        canVote -> DeliColors.OnSurfaceVariant
+        else -> DeliColors.Border
+    }
     Box(
         modifier = Modifier
-            .size(size + 8.dp)
-            .clip(CircleShape)
-            .background(accent.copy(alpha = 0.22f * disc))
+            .size(size + 6.dp)
             .then(if (canVote) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = if (up) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (up) "Upvote" else "Downvote",
-            tint = when {
-                active -> accent
-                canVote -> DeliColors.OnSurfaceVariant
-                else -> DeliColors.Border
-            },
-            // The vote in force is drawn a touch larger, which is how a flat icon reads as
-            // slightly heavier without a second icon or a stroke of its own.
-            modifier = Modifier.size(if (active) size * 1.15f else size),
-        )
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val dx = w * 0.24f
+            val dy = h * 0.14f
+            val cy = h * 0.50f
+            val topY = if (up) cy - dy else cy + dy
+            val sideY = if (up) cy + dy else cy - dy
+            val strokePx = (if (active) 2.75.dp else 1.85.dp).toPx()
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.5f - dx, sideY)
+                lineTo(w * 0.5f, topY)
+                lineTo(w * 0.5f + dx, sideY)
+            }
+            drawPath(
+                path = path,
+                color = tint,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokePx,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                ),
+            )
+        }
     }
 }
 

@@ -341,6 +341,7 @@ private fun DeliRoot() {
                     hole = hole,
                     contentPadding = noPad,
                     onMessage = { appVm.showMessage(it) },
+                    onOpenWeb = { path, title -> nav.navigate(Routes.web(path, title)) },
                 )
             }
 
@@ -354,6 +355,7 @@ private fun DeliRoot() {
                     vm = vm,
                     contentPadding = noPad,
                     onOpenHole = { nav.navigate("feed/$it") },
+                    onMessage = { appVm.showMessage(it) },
                 )
             }
 
@@ -576,12 +578,16 @@ private fun DeliRoot() {
                 RandomScreen(
                     kind = kind,
                     onResolved = { target ->
-                        if (kind == "user") {
-                            nav.navigate(Routes.user(target.substringAfter("/@")))
+                        val dest = if (kind == "user") {
+                            Routes.user(target.substringAfter("/@"))
                         } else {
-                            nav.navigate(Routes.post(target))
+                            Routes.post(target)
+                        }
+                        nav.navigate(dest) {
+                            popUpTo("random?kind={kind}") { inclusive = true }
                         }
                     },
+                    onError = { nav.popBackStack() },
                     onMessage = { appVm.showMessage(it) },
                 )
             }

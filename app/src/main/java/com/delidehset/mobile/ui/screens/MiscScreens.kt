@@ -784,6 +784,7 @@ private fun SettingsRowItem(
 fun RandomScreen(
     kind: String,
     onResolved: (String) -> Unit,
+    onError: () -> Unit = {},
     onMessage: (String) -> Unit,
 ) {
     val vm = com.delidehset.mobile.ui.deliViewModel { RandomViewModel(it.repository) }
@@ -792,10 +793,16 @@ fun RandomScreen(
     // Built here rather than in the effect below: `t` reads the language from the
     // composition, and a coroutine is not a composable.
     val pickFailed = t("Rastgele hedef bulunamadı: {0}")
-    LaunchedEffect(kind) { vm.pick(kind) }
+    LaunchedEffect(kind) { vm.pick(kind, force = true) }
     LaunchedEffect(state.target, state.error) {
-        state.target?.let { onResolved(it) }
-        state.error?.let { onMessage(fill(pickFailed, it)) }
+        state.target?.let { target ->
+            vm.reset()
+            onResolved(target)
+        }
+        state.error?.let {
+            onMessage(fill(pickFailed, it))
+            onError()
+        }
     }
 
     if (state.error != null) {
