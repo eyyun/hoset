@@ -109,6 +109,12 @@ data class Hole(
     val description: String? = null,
 )
 
+/** What a community's own page says about the viewer's relationship to it. */
+data class HoleState(
+    val joined: Boolean? = null,
+    val blocked: Boolean? = null,
+)
+
 data class SiteUser(
     val id: String,
     val name: String,
@@ -176,6 +182,8 @@ data class UserProfile(
     val tabs: List<ProfileTab> = emptyList(),
     val muted: Boolean = false,
     val canModerate: Boolean = false,
+    /** The posts the Wall tab lists — the same cards, read off the same page. */
+    val wallPosts: List<FeedPost> = emptyList(),
 )
 
 data class DailyCount(val label: String, val count: Int)
@@ -235,6 +243,22 @@ data class AccountSettings(
     val personal: PersonalSettings = PersonalSettings(),
     val security: SecuritySettings = SecuritySettings(),
 )
+
+/**
+ * One row of a profile's Comments tab.
+ *
+ * The site prints the same card shape there: the author, an age, the post it was written
+ * on — as `/post/<uuid>`, not as the post's permalink — and the comment itself.
+ */
+data class UserComment(
+    val id: String,
+    val ago: String,
+    val postHref: String?,
+    val postLabel: String?,
+    val bodyHtml: String,
+) {
+    val text: String get() = HtmlParser.stripTags(bodyHtml)
+}
 
 /**
  * One row of `/notifications`.

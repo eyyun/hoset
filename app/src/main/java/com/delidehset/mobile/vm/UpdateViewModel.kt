@@ -53,6 +53,7 @@ class UpdateViewModel(private val context: Context) : ViewModel() {
     private var pending: UpdateInfo? = null
 
     fun maybeCheckOnLaunch() {
+        if (!com.delidehset.mobile.data.HosetPrefs.autoUpdate(appContext)) return
         // A failed check leaves the state on Failed; that must not stop the next launch from
         // trying again, or one bad minute of network hides every release after it.
         when (_state.value) {

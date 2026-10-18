@@ -424,6 +424,36 @@ class DeliRepository(
         java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     /**
+     * Whether the viewer follows a community, as its own page renders it.
+     *
+     * A guest page carries no follow control at all, so `null` means "the page did not
+     * say" rather than "not following".
+     */
+    suspend fun holeState(hole: String): HoleState =
+        HtmlParser.parseHoleState(page("/h/" + encodeSegment(hole)))
+
+    /** Hiding a whole community from the feed, the page's eye-slash button. */
+    suspend fun blockHole(hole: String, block: Boolean): ActionResult {
+        ensureAntiforgery()
+        val name = encodeSegment(hole)
+        val res = http.postForm(
+            if (block) "/h/$name/block" else "/h/$name/unblock",
+            emptyList(),
+            referer = "/h/$name",
+        )
+        cache.clear()
+        return interpret(res, tr("Topluluk"))
+    }
+
+    /** A profile's Posts tab, read from its own page so the list stays in the app. */
+    suspend fun userPosts(name: String, force: Boolean = false): List<FeedPost> =
+        HtmlParser.parseUserPosts(page("/@$name/posts", force = force))
+
+    /** A profile's Comments tab, same idea: the page is the only source the site offers. */
+    suspend fun userComments(name: String, force: Boolean = false): List<UserComment> =
+        HtmlParser.parseUserComments(page("/@$name/comments", force = force))
+
+    /**
      * `/notifications`, as the site renders it.
      *
      * Not cached for long: the bell is a "how many are waiting" question, and a stale

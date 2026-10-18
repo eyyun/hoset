@@ -18,6 +18,7 @@ class DeliApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        com.delidehset.mobile.data.HosetPrefs.init(this)
         container = AppContainer(this)
 
         // The site offers no push, so notifications are polled — the channel and the

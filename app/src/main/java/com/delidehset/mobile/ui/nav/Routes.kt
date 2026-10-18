@@ -29,6 +29,11 @@ object Routes {
     const val HOLES = "holes"
     const val SEARCH = "search"
     const val SUBMIT = "submit"
+
+    /** [SUBMIT] with the community the composer should start on. */
+    const val SUBMIT_PATTERN = "submit?hole={hole}"
+
+    fun submit(hole: String? = null) = if (hole.isNullOrBlank()) SUBMIT else "$SUBMIT?hole=$hole"
     const val LOGIN = "login"
     const val USER = "user"
     const val PAGE = "page"

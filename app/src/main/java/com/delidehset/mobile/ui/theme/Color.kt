@@ -424,7 +424,18 @@ object DeliPalettes {
 
     val fallback: Palette = all.first()
 
-    fun of(id: String?): Palette = all.firstOrNull { it.id == id } ?: fallback
+    /** Custom user-created palettes, kept alongside the built-in kits. */
+    private val customList = mutableStateOf<List<Palette>>(emptyList())
+
+    val custom: List<Palette> get() = customList.value
+
+    val available: List<Palette> get() = all + customList.value
+
+    fun setCustom(list: List<Palette>) {
+        customList.value = list
+    }
+
+    fun of(id: String?): Palette = available.firstOrNull { it.id == id } ?: fallback
 }
 
 /**
@@ -443,6 +454,10 @@ object DeliColors {
 
     fun apply(id: String?) {
         current.value = DeliPalettes.of(id)
+    }
+
+    fun apply(palette: Palette) {
+        current.value = palette
     }
 
     val Background: Color get() = current.value.background

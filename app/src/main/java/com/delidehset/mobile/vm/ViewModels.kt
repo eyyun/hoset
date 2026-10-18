@@ -21,7 +21,9 @@ import com.delidehset.mobile.data.SecuritySettings
 import com.delidehset.mobile.data.SimpleRow
 import com.delidehset.mobile.data.SiteUser
 import com.delidehset.mobile.data.SessionStore
+import com.delidehset.mobile.data.CustomThemeSpec
 import com.delidehset.mobile.data.ThemeStore
+import com.delidehset.mobile.data.UserComment
 import com.delidehset.mobile.data.UserProfile
 import com.delidehset.mobile.data.Viewer
 import com.delidehset.mobile.ui.AppLang
@@ -78,15 +80,34 @@ class AppViewModel(
      * The app's own look. Unlike the language this never goes to the site: the site's theme
      * setting is the site's, and the app has its own screens, so it has its own palette.
      */
-    val theme: StateFlow<Palette> = themeStore.theme
-        .map { DeliPalettes.of(it) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DeliPalettes.fallback)
+    val theme: StateFlow<Palette> = kotlinx.coroutines.flow.combine(
+        themeStore.theme,
+        themeStore.customSpecs,
+    ) { id, specs ->
+        val customPalettes = specs.map { it.toPalette() }
+        DeliPalettes.setCustom(customPalettes)
+        DeliPalettes.of(id)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, DeliPalettes.fallback)
 
     fun setTheme(palette: Palette) {
         // Applied here rather than only through the stored flow, so the tap repaints
         // immediately instead of one disk read later.
-        DeliColors.apply(palette.id)
+        DeliColors.apply(palette)
         viewModelScope.launch(Dispatchers.IO) { themeStore.save(palette.id) }
+    }
+
+    fun saveCustomTheme(spec: CustomThemeSpec) {
+        val palette = spec.toPalette()
+        DeliPalettes.setCustom(DeliPalettes.custom.filterNot { it.id == palette.id } + palette)
+        DeliColors.apply(palette)
+        viewModelScope.launch(Dispatchers.IO) { themeStore.saveCustom(spec) }
+    }
+
+    fun deleteCustomTheme(id: String) {
+        val next = DeliPalettes.custom.filterNot { it.id == id }
+        DeliPalettes.setCustom(next)
+        if (DeliColors.palette.id == id) DeliColors.apply(DeliPalettes.fallback)
+        viewModelScope.launch(Dispatchers.IO) { themeStore.deleteCustom(id) }
     }
 
     private val _message = MutableStateFlow<String?>(null)
@@ -108,7 +129,7 @@ class AppViewModel(
         // The stored palette is pushed into the colours the screens read. Collected on the
         // main dispatcher on purpose: this writes a snapshot state that recomposes the UI.
         viewModelScope.launch {
-            themeStore.theme.collect { id -> DeliColors.apply(id) }
+            theme.collect { palette -> DeliColors.apply(palette) }
         }
         refresh()
     }
@@ -181,6 +202,10 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _holeFollowing = MutableStateFlow<Boolean?>(null)
     val holeFollowing: StateFlow<Boolean?> = _holeFollowing.asStateFlow()
 
+    /** Whether the viewer hid the hole. The page's own eye-slash button flips this. */
+    private val _holeBlocked = MutableStateFlow<Boolean?>(null)
+    val holeBlocked: StateFlow<Boolean?> = _holeBlocked.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -190,9 +215,39 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
         if (started && _state.value.hole == hole && _state.value.sort == sort) return
         started = true
         _holeFollowing.value = null
+        _holeBlocked.value = null
         _state.value = FeedUiState(sort = sort, hole = hole, effortOnly = effortOnly)
         // Cache first: opening a feed you already visited renders immediately.
         load(reset = true, force = false)
+        if (hole != null) loadHoleState(hole)
+    }
+
+    /** Reads the community's own page so its join/leave state is right on arrival. */
+    private fun loadHoleState(hole: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.holeState(hole) }
+                .onSuccess { state ->
+                    state.joined?.let { _holeFollowing.value = it }
+                    state.blocked?.let { _holeBlocked.value = it }
+                }
+        }
+    }
+
+    /** Hiding a community from the feed, as the hole page's own button does. */
+    fun toggleHoleBlock(hole: String) {
+        val target = !(_holeBlocked.value ?: false)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.blockHole(hole, target) }
+                .onSuccess { result ->
+                    if (result.ok) {
+                        _holeBlocked.value = target
+                        _message.value = tr(if (target) "Topluluk engellendi." else "Topluluk engeli kaldırıldı.")
+                    } else {
+                        _message.value = result.message ?: tr("İşlem tamamlanamadı.")
+                    }
+                }
+                .onFailure { _message.value = DeliErrors.explain(it) }
+        }
     }
 
     /** Follow or leave a community; the hole's own page uses the same two routes. */
@@ -312,6 +367,15 @@ data class PostUiState(
     val replyTo: CommentNode? = null,
     val canInteract: Boolean = false,
     val message: String? = null,
+    /**
+     * A comment this app just sent that the refreshed page has not shown yet.
+     *
+     * The site answers `/comment` with the new id and only renders it into the page on the
+     * next request; until that request carries it, the app draws it itself at the bottom of
+     * the thread so the person sees the comment they just wrote instead of an unchanged
+     * page.
+     */
+    val posted: CommentNode? = null,
 )
 
 class PostViewModel(private val repo: DeliRepository) : ViewModel() {
@@ -340,6 +404,11 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
                             canInteract = page.commentForm != null,
                             loading = false,
                             error = null,
+                            // Once the refreshed page carries the comment, the local copy
+                            // is no longer needed — the real row takes over.
+                            posted = it.posted?.takeIf { local ->
+                                !page.comments.containsComment(local.id)
+                            },
                         )
                     }
                 }
@@ -376,7 +445,7 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
     fun startReply(comment: CommentNode?) = _state.update { it.copy(replyTo = comment) }
     fun cancelReply() = _state.update { it.copy(replyTo = null) }
 
-    fun sendComment(body: String) {
+    fun sendComment(body: String, authorName: String? = null) {
         val s = _state.value
         val post = s.post ?: return
         if (body.isBlank()) return
@@ -387,7 +456,21 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
             }.getOrNull()
             _state.update { it.copy(sending = false, replyTo = null) }
             if (res?.ok == true) {
-                _state.update { it.copy(message = tr("Yorum gönderildi.")) }
+                val cid = res.commentId()
+                val local = CommentNode(
+                    id = cid ?: "local-${System.currentTimeMillis()}",
+                    parentId = null,
+                    depth = 0,
+                    authorName = authorName,
+                    authorHref = authorName?.let { "/@$it" },
+                    authorAvatar = null,
+                    bodyHtml = "<p>" + body.replace("<", "&lt;") + "</p>",
+                    score = 1,
+                    viewerVote = 1,
+                    ago = tr("şimdi"),
+                    isDeleted = false,
+                )
+                _state.update { it.copy(message = tr("Yorum gönderildi."), posted = local) }
                 load(permalink, force = true)
             } else {
                 _state.update { it.copy(message = res?.message ?: "Yorum gönderilemedi.") }
@@ -414,6 +497,19 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
 }
+
+/** Whether the thread already carries a comment, at any depth. */
+private fun List<CommentNode>.containsComment(id: String): Boolean =
+    any { it.id == id || it.children.containsComment(id) }
+
+/** The id the site hands back for a freshly created comment, out of `{"cid":"…"}`. */
+private fun ActionResult.commentId(): String? = runCatching {
+    val body = raw?.body ?: return null
+    val root = kotlinx.serialization.json.Json.parseToJsonElement(body)
+    (root as? kotlinx.serialization.json.JsonObject)
+        ?.get("cid")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+        ?.takeIf { it.isNotBlank() }
+}.getOrNull()
 
 /* ------------------------------------------------------------------ */
 /*  Simple lists: holes, users, badges, log pages, profiles            */
@@ -522,11 +618,68 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    /** The profile's other two tabs, kept per profile so switching back is instant. */
+    private val _posts = MutableStateFlow<Map<String, List<FeedPost>>>(emptyMap())
+    val posts: StateFlow<Map<String, List<FeedPost>>> = _posts.asStateFlow()
+
+    private val _comments = MutableStateFlow<Map<String, List<UserComment>>>(emptyMap())
+    val comments: StateFlow<Map<String, List<UserComment>>> = _comments.asStateFlow()
+
+    private val _listLoading = MutableStateFlow(false)
+    val listLoading: StateFlow<Boolean> = _listLoading.asStateFlow()
+
     fun consumeMessage() { _message.value = null }
 
+    /** Loads `/@name/posts` once; a second visit uses what the first one brought. */
+    fun loadPosts(name: String, force: Boolean = false) {
+        if (!force && _posts.value.containsKey(name)) return
+        _listLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.userPosts(name, force) }
+                .onSuccess { list -> _posts.update { it + (name to list) } }
+                .onFailure { e -> _message.value = DeliErrors.explain(e) }
+            _listLoading.value = false
+        }
+    }
+
+    fun loadComments(name: String, force: Boolean = false) {
+        if (!force && _comments.value.containsKey(name)) return
+        _listLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.userComments(name, force) }
+                .onSuccess { list -> _comments.update { it + (name to list) } }
+                .onFailure { e -> _message.value = DeliErrors.explain(e) }
+            _listLoading.value = false
+        }
+    }
+
     /** The three things a profile page can do to another account, all in one place. */
-    fun follow(name: String, follow: Boolean) = act(name, tr(if (follow) "Takip edildi." else "Takipten çıkıldı.")) {
-        repo.followUser(name, follow)
+    fun follow(name: String, follow: Boolean) {
+        if (_busy.value) return
+        _busy.value = true
+        val prev = _state.value[name]
+        if (prev != null) {
+            val delta = if (follow) 1 else -1
+            val newFollowers = ((prev.followers ?: 0) + delta).coerceAtLeast(0)
+            _state.update { m -> m + (name to prev.copy(isFollowing = follow, followers = newFollowers)) }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.followUser(name, follow) }
+                .onSuccess { result ->
+                    if (result.ok) {
+                        _message.value = tr(if (follow) "Takip edildi." else "Takipten çıkıldı.")
+                        load(name, force = true)
+                    } else {
+                        if (prev != null) _state.update { m -> m + (name to prev) }
+                        _message.value = result.message ?: tr("İşlem tamamlanamadı.")
+                    }
+                }
+                .onFailure {
+                    if (prev != null) _state.update { m -> m + (name to prev) }
+                    _message.value = DeliErrors.explain(it)
+                }
+            _busy.value = false
+        }
     }
 
     fun mute(name: String, id: String, mute: Boolean) = act(

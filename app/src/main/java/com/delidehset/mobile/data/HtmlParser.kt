@@ -149,7 +149,7 @@ object HtmlParser {
             holeHref = holeLink?.attr("href"),
             authorName = authorLink?.text()?.trim()?.removePrefix("@"),
             authorHref = authorLink?.attr("href"),
-            authorAvatar = doc.selectFirst(".actual-post img[src*=/avatar/]")?.attr("src"),
+            authorAvatar = doc.selectFirst(".actual-post img[src*=/avatar/], .actual-post img[src*=/uploads/], .actual-post img[src*=/pp/]")?.attr("src"),
             ago = ago,
             editedAgo = edited,
             commentCount = commentCount,
@@ -224,7 +224,7 @@ object HtmlParser {
                 depth = el.attr("data-level").toIntOrNull() ?: 0,
                 authorName = authorLink?.text()?.trim()?.removePrefix("@"),
                 authorHref = authorLink?.attr("href"),
-                authorAvatar = el.selectFirst("img[src*=/avatar/]")?.attr("src"),
+                authorAvatar = el.selectFirst("img[src*=/avatar/], img[src*=/uploads/], img[src*=/pp/]")?.attr("src"),
                 bodyHtml = body,
                 score = el.selectFirst(".comment-score, .score")?.text()?.trim()?.toIntOrNull() ?: 0,
                 viewerVote = 0,
@@ -346,6 +346,33 @@ object HtmlParser {
      * so an empty search used to come back as three rows named after the tabs. Only the
      * pane is read here, and an empty pane is an empty result, not a fallback to links.
      */
+    /**
+     * A community page's own two switches: joined, and blocked.
+     *
+     * The page renders both states as a pair of buttons where exactly one carries
+     * `d-none` — `#follow-hole`/`#unfollow-hole` for joining, `#block-hole`/
+     * `#unblock-hole` for blocking. A guest page has neither pair, so `null` is "the page
+     * did not say", not "no".
+     */
+    fun parseHoleState(html: String): HoleState {
+        val doc = document(html)
+        val joined = when {
+            doc.selectFirst("#unfollow-hole") != null ->
+                doc.selectFirst("#unfollow-hole")?.hasClass("d-none") == false
+            doc.selectFirst("#follow-hole") != null ->
+                doc.selectFirst("#follow-hole")?.hasClass("d-none") == true
+            else -> null
+        }
+        val blocked = when {
+            doc.selectFirst("#unblock-hole") != null ->
+                doc.selectFirst("#unblock-hole")?.hasClass("d-none") == false
+            doc.selectFirst("#block-hole") != null ->
+                doc.selectFirst("#block-hole")?.hasClass("d-none") == true
+            else -> null
+        }
+        return HoleState(joined = joined, blocked = blocked)
+    }
+
     fun parseSearch(html: String): List<SimpleRow> {
         val pane = document(html).selectFirst(".tab-content") ?: return emptyList()
 
@@ -510,6 +537,10 @@ object HtmlParser {
         // anybody reads.
         val canModerate = main.selectFirst("form[action*=/ban_user/], [id$=--admintools]") != null
 
+        // The wall itself: the same cards the feed draws, so the first tab is the
+        // person's posts rather than an empty page with two counters on it.
+        val wall = feedCardsFrom(doc)
+
         return UserProfile(
             id = main.selectFirst("#profile--info--id")?.text()?.substringAfter("ID:")?.trim()
                 ?.takeIf { it.isNotBlank() }
@@ -536,6 +567,7 @@ object HtmlParser {
             tabs = tabs,
             muted = muted,
             canModerate = canModerate,
+            wallPosts = wall,
         )
     }
 
@@ -571,6 +603,80 @@ object HtmlParser {
     /* ---------------------------------------------------------------- */
     /*  Account settings (Personal + Security)                          */
     /* ---------------------------------------------------------------- */
+
+    /* ---------------------------------------------------------------- */
+    /*  A profile's own lists: its posts, then its comments            */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * `/@name/posts` — the same `.actual-post` cards the feed draws, read into [FeedPost]
+     * so the profile can use the app's own post card instead of a browser.
+     *
+     * The site prints no JSON for this list (the feed API ignores an author filter), so the
+     * page is the only source. Everything it does print — title, hole, score, comment
+     * count, age — is taken from the card, and a card without a title link is skipped
+     * rather than shown as a blank row.
+     */
+    fun parseUserPosts(html: String): List<FeedPost> = feedCardsFrom(document(html))
+
+    /** The `.actual-post` cards inside a page, shared by the wall and the posts tab. */
+    private fun feedCardsFrom(doc: org.jsoup.nodes.Document): List<FeedPost> {
+        val cards = doc.select(".posts .actual-post, .posts article, .posts .card")
+        return cards.mapNotNull { card ->
+            val titleLink = card.selectFirst("h5.card-title a")
+                ?: card.selectFirst("a.stretched-link")
+                ?: card.selectFirst("a[href*=/post/]")
+            val href = titleLink?.attr("href").orEmpty()
+            val title = titleLink?.text()?.trim().orEmpty()
+            if (title.isBlank() || href.isBlank()) return@mapNotNull null
+            val meta = card.selectFirst(".post-meta")?.text().orEmpty()
+            FeedPost(
+                id = card.id().removePrefix("post-"),
+                permalink = href,
+                titleHtml = title,
+                ago = meta.substringAfter("·", "").trim().substringBefore(" in ").ifBlank { null },
+                score = card.selectFirst(".score")?.text()?.trim()?.toIntOrNull() ?: 0,
+                commentCount = card.selectFirst(".post-actions a")?.text()
+                    ?.filter { it.isDigit() }?.toIntOrNull() ?: 0,
+                hole = card.selectFirst("a.hole-link")?.text()?.trim()
+                    ?.removePrefix("/h/")?.takeIf { it.isNotBlank() },
+                authorName = card.selectFirst("a.user-name")?.text()?.trim()
+                    ?.removePrefix("@")?.takeIf { it.isNotBlank() },
+                authorHref = card.selectFirst("a.user-name")?.attr("href")?.takeIf { it.isNotBlank() },
+                thumbUrl = card.selectFirst("img.post-img")?.attr("src")
+                    ?.takeIf { it.isNotBlank() && !it.contains("default_") },
+                hasThumbnail = card.selectFirst("img.post-img") != null,
+            )
+        }
+    }
+
+    /**
+     * `/@name/comments` — the cards under `#comment-<uuid>`.
+     *
+     * Each one names the post it belongs to as a `/post/<uuid>` link, which is a page the
+     * site answers directly, so a tap can open it in the app.
+     */
+    fun parseUserComments(html: String): List<UserComment> {
+        val doc = document(html)
+        return doc.select("div[id^=comment-]").mapNotNull { card ->
+            val id = card.id().removePrefix("comment-")
+            val body = card.selectFirst(".comment-body")?.html().orEmpty()
+            if (id.isBlank() && body.isBlank()) return@mapNotNull null
+            val meta = card.selectFirst(".comment-meta")
+            val postLink = meta?.selectFirst("a[href^=/post/]")
+            // The site labels these "post <uuid>"; the uuid is not a title, so the row
+            // shows the link only when the label is worth reading.
+            val label = postLink?.text()?.trim()
+                ?.takeIf { it.isNotBlank() && !it.startsWith("post ", ignoreCase = true) }
+            UserComment(
+                id = id,
+                ago = meta?.selectFirst("span.text-muted")?.text()?.trim().orEmpty(),
+                postHref = postLink?.attr("href")?.takeIf { it.isNotBlank() },
+                postLabel = label,
+                bodyHtml = body,
+            )
+        }
+    }
 
     /* ---------------------------------------------------------------- */
     /*  Notifications                                                   */
