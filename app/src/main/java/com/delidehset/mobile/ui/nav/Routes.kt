@@ -36,6 +36,19 @@ object Routes {
     fun submit(hole: String? = null) = if (hole.isNullOrBlank()) SUBMIT else "$SUBMIT?hole=$hole"
     const val LOGIN = "login"
     const val USER = "user"
+
+    /**
+     * A profile's followers or the accounts it follows, drawn by the app.
+     *
+     * These two lists are the site's own user table, which the app already reads for
+     * `/users`; sending them to the web frame made it look like a browser at the moment it
+     * had everything it needed to draw them itself.
+     */
+    const val RELATIONS = "relations"
+    const val RELATIONS_PATTERN = "relations?name={name}&followers={followers}"
+
+    fun relations(name: String, followers: Boolean) =
+        "$RELATIONS?name=$name&followers=$followers"
     const val PAGE = "page"
     const val SETTINGS = "settings"
 

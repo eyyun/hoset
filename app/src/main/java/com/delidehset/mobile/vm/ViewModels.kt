@@ -406,9 +406,7 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
                             error = null,
                             // Once the refreshed page carries the comment, the local copy
                             // is no longer needed — the real row takes over.
-                            posted = it.posted?.takeIf { local ->
-                                !page.comments.containsComment(local.id)
-                            },
+                            posted = it.posted?.takeIf { local -> !page.comments.carriesComment(local) },
                         )
                     }
                 }
@@ -498,9 +496,28 @@ class PostViewModel(private val repo: DeliRepository) : ViewModel() {
     fun consumeMessage() = _state.update { it.copy(message = null) }
 }
 
-/** Whether the thread already carries a comment, at any depth. */
-private fun List<CommentNode>.containsComment(id: String): Boolean =
-    any { it.id == id || it.children.containsComment(id) }
+/** Whether the thread already carries this comment, at any depth. */
+internal fun List<CommentNode>.carriesComment(local: CommentNode): Boolean =
+    any { it.sameCommentAs(local) || it.children.carriesComment(local) }
+
+/**
+ * Whether a row in the thread is the comment that was just sent.
+ *
+ * The id alone is not enough: `/comment` answers with the platform's own `cid`, while the
+ * rows in the thread carry the id the site rendered, and the two need not be the same
+ * string. Matching only on the id left the local copy on screen next to the real row, so
+ * the first comment appeared twice. The body — and the author, when both are known — is
+ * the fallback.
+ */
+internal fun CommentNode.sameCommentAs(local: CommentNode): Boolean {
+    val mine = id.trim().removePrefix("comment-")
+    val theirs = local.id.trim().removePrefix("comment-")
+    if (mine.isNotEmpty() && mine == theirs) return true
+    if (bodyHtml.trim() != local.bodyHtml.trim()) return false
+    val a = authorName?.trim()
+    val b = local.authorName?.trim()
+    return a == null || b == null || a == b
+}
 
 /** The id the site hands back for a freshly created comment, out of `{"cid":"…"}`. */
 private fun ActionResult.commentId(): String? = runCatching {
@@ -554,6 +571,33 @@ class UsersViewModel(private val repo: DeliRepository) : ViewModel() {
             runCatching { repo.users(force) }
                 .onSuccess { _state.value = ListUiState(items = it, loading = false) }
                 .onFailure { _state.value = ListUiState(loading = false, error = DeliErrors.explain(it)) }
+        }
+    }
+}
+
+/**
+ * The two lists a profile links to: its followers and the accounts it follows.
+ *
+ * The site renders both as the same table `/users` uses, so the same reader serves all
+ * three — and the app no longer has to hand the person off to a web frame for them.
+ */
+class RelationUsersViewModel(private val repo: DeliRepository) : ViewModel() {
+    private val _state = MutableStateFlow(ListUiState<SiteUser>())
+    val state: StateFlow<ListUiState<SiteUser>> = _state.asStateFlow()
+    private var loadedPath: String? = null
+
+    fun load(name: String, followers: Boolean, force: Boolean = false) {
+        if (name.isBlank()) return
+        val path = "/@$name/" + if (followers) "followers" else "following"
+        if (loadedPath == path && !force) return
+        loadedPath = path
+        _state.value = _state.value.copy(loading = true, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.usersAt(path, force) }
+                .onSuccess { _state.value = ListUiState(items = it, loading = false) }
+                .onFailure {
+                    _state.value = ListUiState(loading = false, error = DeliErrors.explain(it))
+                }
         }
     }
 }

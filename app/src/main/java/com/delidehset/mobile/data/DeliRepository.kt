@@ -648,6 +648,14 @@ class DeliRepository(
     suspend fun users(force: Boolean = false): List<SiteUser> =
         HtmlParser.parseUsers(page("/users", force))
 
+    /**
+     * Any page that renders the user table — a profile's `/followers` and `/following`.
+     * These used to be handed to the web frame for no reason: the site answers them with
+     * the same table `/users` does, which the app already knows how to read.
+     */
+    suspend fun usersAt(path: String, force: Boolean = false): List<SiteUser> =
+        HtmlParser.parseUsers(page(path, force))
+
     suspend fun profile(name: String, force: Boolean = false): UserProfile =
         HtmlParser.parseProfile(page("/@$name", force), name)
 

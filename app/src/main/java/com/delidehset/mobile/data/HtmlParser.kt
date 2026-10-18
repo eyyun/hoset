@@ -202,6 +202,8 @@ object HtmlParser {
                 ?: o.str("author")?.takeIf { it.isNotBlank() }?.let { "/@$it" },
             authorAvatar = o.str("author_avatar", "authorAvatar", "avatar")
                 ?: author?.str("avatar", "avatar_url"),
+            authorColor = o.str("flair_text_color", "flairTextColor", "text_color", "author_color")
+                ?: author?.str("color", "text_color"),
             bodyHtml = bodyHtml,
             score = o.int("score", "points") ?: 0,
             viewerVote = o.int("viewer_vote", "viewerVote", "voted", "vote") ?: 0,
@@ -643,6 +645,12 @@ object HtmlParser {
                 authorName = card.selectFirst("a.user-name")?.text()?.trim()
                     ?.removePrefix("@")?.takeIf { it.isNotBlank() },
                 authorHref = card.selectFirst("a.user-name")?.attr("href")?.takeIf { it.isNotBlank() },
+                // These cards are the profile's own post list, and they carry the author's
+                // picture right beside the name. Leaving it out was why the same post had
+                // a face in the feed and a bare initial under a profile.
+                authorAvatar = card.selectFirst(
+                    "a.user-name img, img[src*=/uploads/], img[src*=/avatar/], img[src*=/pp/]"
+                )?.attr("src")?.takeIf { it.isNotBlank() },
                 thumbUrl = card.selectFirst("img.post-img")?.attr("src")
                     ?.takeIf { it.isNotBlank() && !it.contains("default_") },
                 hasThumbnail = card.selectFirst("img.post-img") != null,

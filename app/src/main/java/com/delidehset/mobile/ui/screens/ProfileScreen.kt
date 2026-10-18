@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -66,6 +65,7 @@ import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.DeliShapes
+import com.delidehset.mobile.ui.theme.avatarShape
 import com.delidehset.mobile.ui.theme.kitSurface
 import com.delidehset.mobile.vm.ProfileViewModel
 
@@ -87,6 +87,10 @@ fun ProfileScreen(
     onEditProfile: () -> Unit = {},
     /** Opens a path the site renders itself — the follower lists, the moderation log. */
     onOpenPath: (path: String, title: String) -> Unit = { _, _ -> },
+    /** A community the profile belongs to, opened as the app's own feed. */
+    onOpenHole: (String) -> Unit = {},
+    /** The followers/following tables, which the app draws itself. */
+    onOpenRelations: (name: String, followers: Boolean) -> Unit = { _, _ -> },
     /** A post from any of the three tabs, opened natively. */
     onOpenPost: (permalink: String) -> Unit = {},
     /** An account named on a post card. */
@@ -120,7 +124,6 @@ fun ProfileScreen(
     val followingLabel = t("Takip")
     val coinsLabel = t("Coin")
     val moderationLabel = t("Moderasyon geçmişi")
-    val communityLabel = t("Topluluk")
     val selfName = profile?.name ?: name
 
     when {
@@ -184,11 +187,17 @@ fun ProfileScreen(
                                 modifier = Modifier.fillMaxWidth().pullUp(46.dp),
                                 verticalAlignment = Alignment.Bottom,
                             ) {
+                                // The ring has to follow the kit like the picture does:
+                                // a square avatar under a round ring spilled out of it.
                                 DeliAvatar(
                                     url = profile.avatarUrl,
                                     size = 86.dp,
                                     name = selfName,
-                                    modifier = Modifier.border(3.dp, DeliColors.Surface, CircleShape)
+                                    modifier = Modifier.border(
+                                        3.dp,
+                                        DeliColors.Surface,
+                                        avatarShape(DeliColors.palette),
+                                    )
                                 )
                                 Spacer(Modifier.weight(1f))
                                 if (!isSelf && profile.isFollowing) {
@@ -243,7 +252,7 @@ fun ProfileScreen(
                                         followersLabel.lowercase(),
                                     ),
                                     onClick = if (profile.followers != null) {
-                                        { onOpenPath("/@${profile.name}/followers", followersLabel) }
+                                        { onOpenRelations(profile.name, true) }
                                     } else null,
                                 )
                                 MutedText("·")
@@ -254,7 +263,7 @@ fun ProfileScreen(
                                         followingLabel.lowercase(),
                                     ),
                                     onClick = if (profile.following != null) {
-                                        { onOpenPath("/@${profile.name}/following", followingLabel) }
+                                        { onOpenRelations(profile.name, false) }
                                     } else null,
                                 )
                                 val coins = profile.stats.firstOrNull { it.key == "Coin" }?.value
@@ -375,7 +384,7 @@ fun ProfileScreen(
                         post = post,
                         canVote = false,
                         onOpen = { onOpenPost(post.permalink) },
-                        onOpenHole = { hole -> onOpenPath("/h/$hole", communityLabel) },
+                        onOpenHole = { hole -> onOpenHole(hole) },
                         onOpenUser = onOpenUser,
                         onVote = {},
                         onShare = {},
@@ -479,7 +488,7 @@ fun ProfileScreen(
                             post = post,
                             canVote = false,
                             onOpen = { onOpenPost(post.permalink) },
-                            onOpenHole = { hole -> onOpenPath("/h/$hole", communityLabel) },
+                            onOpenHole = { hole -> onOpenHole(hole) },
                             onOpenUser = onOpenUser,
                             onVote = {},
                             onShare = {},

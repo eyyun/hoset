@@ -96,6 +96,14 @@ data class CommentNode(
     val viewerVote: Int,
     val ago: String?,
     val isDeleted: Boolean,
+    /**
+     * The colour the site gives this person (`flair_text_color`), if it gave one.
+     *
+     * The replies payload carries no picture for a comment's author, so the app's own
+     * initial stands in for it; taking the colour the site already uses for that name is
+     * what keeps the two views looking like the same account.
+     */
+    val authorColor: String? = null,
     val children: List<CommentNode> = emptyList(),
 )
 

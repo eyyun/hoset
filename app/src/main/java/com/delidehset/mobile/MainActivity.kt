@@ -45,6 +45,7 @@ import com.delidehset.mobile.ui.screens.PageScreen
 import com.delidehset.mobile.ui.screens.PostScreen
 import com.delidehset.mobile.ui.screens.ProfileScreen
 import com.delidehset.mobile.ui.screens.RandomScreen
+import com.delidehset.mobile.ui.screens.RelationsScreen
 import com.delidehset.mobile.ui.screens.SearchScreen
 import com.delidehset.mobile.ui.screens.SettingsScreen
 import com.delidehset.mobile.ui.screens.SubmitScreen
@@ -284,6 +285,21 @@ private fun DeliRoot() {
             }
 
             composable(
+                route = Routes.RELATIONS_PATTERN,
+                arguments = listOf(
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("followers") { type = NavType.BoolType; defaultValue = true },
+                ),
+            ) { entry ->
+                RelationsScreen(
+                    name = entry.arguments?.getString("name").orEmpty(),
+                    followers = entry.arguments?.getBoolean("followers") ?: true,
+                    contentPadding = noPad,
+                    onOpenUser = { nav.navigate(Routes.user(it)) },
+                )
+            }
+
+            composable(
                 route = "post?permalink={permalink}",
                 arguments = listOf(navArgument("permalink") {
                     type = NavType.StringType
@@ -415,9 +431,14 @@ private fun DeliRoot() {
                     isSelf = name.isNotBlank() && name.equals(viewer.username, ignoreCase = true),
                     contentPadding = noPad,
                     onEditProfile = { nav.navigate(Routes.account("personal")) },
-                    // Follower lists are still the site's own pages; the profile's tabs
-                    // and every post in them are drawn by the app.
+                    // Only the moderation history is still the site's own page: the
+                    // followers, the following list and every community the profile names
+                    // are drawn by the app.
                     onOpenPath = { path, title -> nav.navigate(Routes.web(path, title)) },
+                    onOpenHole = { hole -> nav.navigate("feed/$hole") },
+                    onOpenRelations = { owner, followers ->
+                        nav.navigate(Routes.relations(owner, followers))
+                    },
                     onOpenPost = { nav.navigate(Routes.post(it)) },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
                     onMessage = { appVm.showMessage(it) },

@@ -9,6 +9,7 @@ import com.delidehset.mobile.data.HtmlParser
 import com.delidehset.mobile.data.commentFields
 import com.delidehset.mobile.data.interpretAction
 import com.delidehset.mobile.data.interpretPictureResponse
+import com.delidehset.mobile.vm.carriesComment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,6 +21,56 @@ import org.junit.Test
  * while still answering `200 OK`.
  */
 class CommentAndActionTest {
+
+    private fun comment(id: String, body: String, author: String?) =
+        com.delidehset.mobile.data.CommentNode(
+            id = id,
+            parentId = null,
+            depth = 0,
+            authorName = author,
+            authorHref = author?.let { "/@$it" },
+            authorAvatar = null,
+            bodyHtml = body,
+            score = 1,
+            viewerVote = 0,
+            ago = null,
+            isDeleted = false,
+        )
+
+    /**
+     * The first comment on a post used to appear twice: the row the site rendered, and the
+     * app's own copy of it. `/comment` answers with the platform's `cid`, the thread carries
+     * the id the page rendered, and the two need not be the same string — so matching only
+     * on the id left both on screen.
+     */
+    @Test
+    fun `a comment is recognised by its body when the ids differ`() {
+        val local = comment("cid-9f2c", "<p>merhaba</p>", "cronus")
+        val thread = listOf(comment("01a14f36-fc5c-7f8b-81d5-61595e59ef51", "<p>merhaba</p>", "cronus"))
+        assertTrue("aynı yorum iki kez görünmemeli", thread.carriesComment(local))
+    }
+
+    @Test
+    fun `the same words from somebody else are not the same comment`() {
+        val local = comment("cid-9f2c", "<p>merhaba</p>", "cronus")
+        val thread = listOf(comment("b1", "<p>merhaba</p>", "Mianserin"))
+        assertFalse(thread.carriesComment(local))
+    }
+
+    @Test
+    fun `a reply already in the thread counts as carried`() {
+        val local = comment("cid-9f2c", "<p>merhaba</p>", "cronus")
+        val child = comment("c-2", "<p>merhaba</p>", "cronus")
+        val thread = listOf(comment("a-1", "<p>başka</p>", "admin").copy(children = listOf(child)))
+        assertTrue(thread.carriesComment(local))
+    }
+
+    @Test
+    fun `a comment nobody sent is not carried`() {
+        val local = comment("cid-9f2c", "<p>merhaba</p>", "cronus")
+        val thread = listOf(comment("a-1", "<p>iyi günler</p>", "admin"))
+        assertFalse(thread.carriesComment(local))
+    }
 
     /** The reply form the site renders, copied from the live post page. */
     private val replyForm = DiscoveredForm(

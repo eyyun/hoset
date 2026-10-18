@@ -57,6 +57,7 @@ import com.delidehset.mobile.ui.components.LoadingBox
 import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.components.ThinDivider
 import com.delidehset.mobile.ui.components.VoteArrows
+import androidx.compose.ui.graphics.Color
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.PostViewModel
 import com.delidehset.mobile.ui.theme.DeliShapes
@@ -361,6 +362,13 @@ fun PostScreen(
     }
 }
 
+/** `805ad5` or `#805ad5` as the site writes it, or null when it wrote nothing usable. */
+private fun siteColor(raw: String?): Color? {
+    val hex = raw?.trim()?.removePrefix("#")?.takeIf { it.length == 6 || it.length == 8 } ?: return null
+    val value = hex.toLongOrNull(16) ?: return null
+    return Color(if (hex.length == 6) value or 0xFF000000L else value)
+}
+
 @Composable
 private fun CommentRow(
     comment: CommentNode,
@@ -382,7 +390,14 @@ private fun CommentRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DeliAvatar(url = comment.authorAvatar, size = 18.dp, name = comment.authorName)
+                DeliAvatar(
+                    url = comment.authorAvatar,
+                    size = 20.dp,
+                    name = comment.authorName,
+                    // The site keeps no picture for a comment's author, so the app's own
+                    // initial stands in — in the colour the site already gives that name.
+                    accent = siteColor(comment.authorColor),
+                )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "@${comment.authorName ?: "anonim"}",

@@ -86,6 +86,7 @@ import com.delidehset.mobile.ui.components.pullUp
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.vm.BadgesViewModel
 import com.delidehset.mobile.vm.RandomViewModel
+import com.delidehset.mobile.vm.RelationUsersViewModel
 import com.delidehset.mobile.vm.TableViewModel
 import com.delidehset.mobile.vm.UsersViewModel
 import com.delidehset.mobile.ui.theme.kitSurface
@@ -237,25 +238,85 @@ fun UsersScreen(
                 )
             }
             items(state.items) { user: SiteUser ->
-                DeliCard(onClick = { onOpenUser(user.name) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        DeliAvatar(url = null, size = 34.dp, name = user.name)
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "@${user.name}",
-                                color = DeliColors.Blue,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            user.joined?.let { MutedText(tf("katıldı: {0}", it)) }
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            MutedText(tf("{0} gönderi", user.posts ?: "0"))
-                            MutedText(tf("{0} yorum", user.comments ?: "0"))
-                        }
-                    }
-                }
+                SiteUserRow(user = user, onOpenUser = onOpenUser)
+            }
+        }
+    }
+}
+
+/** One row of the site's user table — `/users`, a profile's followers, who it follows. */
+@Composable
+private fun SiteUserRow(user: SiteUser, onOpenUser: (String) -> Unit) {
+    DeliCard(onClick = { onOpenUser(user.name) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DeliAvatar(url = null, size = 34.dp, name = user.name)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "@${user.name}",
+                    color = DeliColors.Blue,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                user.joined?.let { MutedText(tf("katıldı: {0}", it)) }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                MutedText(tf("{0} gönderi", user.posts ?: "0"))
+                MutedText(tf("{0} yorum", user.comments ?: "0"))
+            }
+        }
+    }
+}
+
+/**
+ * A profile's followers, or the accounts it follows.
+ *
+ * Both used to open in the app's web frame. The site answers them with the same table
+ * `/users` does, so the app draws them itself now and the person stays in the app.
+ */
+@Composable
+fun RelationsScreen(
+    name: String,
+    followers: Boolean,
+    contentPadding: PaddingValues,
+    onOpenUser: (String) -> Unit,
+) {
+    val vm = com.delidehset.mobile.ui.deliViewModel("relations-$name-$followers") {
+        RelationUsersViewModel(it.repository)
+    }
+    val state by vm.state.collectAsStateWithLifecycle()
+    LaunchedEffect(name, followers) { vm.load(name, followers) }
+
+    val title = if (followers) t("Takipçi") else t("Takip")
+
+    when {
+        state.loading -> LoadingBox(Modifier.fillMaxSize())
+        state.error != null -> ErrorBox(
+            state.error!!,
+            Modifier.fillMaxSize(),
+            onRetry = { vm.load(name, followers, true) },
+        )
+        state.items.isEmpty() -> EmptyBox("Kullanıcı yok.", Modifier.fillMaxSize())
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize().background(DeliColors.Background),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                top = 12.dp,
+                bottom = contentPadding.calculateBottomPadding() + 20.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item {
+                Text(
+                    "@$name · $title",
+                    color = DeliColors.OnBackground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            items(state.items) { user: SiteUser ->
+                SiteUserRow(user = user, onOpenUser = onOpenUser)
             }
         }
     }
