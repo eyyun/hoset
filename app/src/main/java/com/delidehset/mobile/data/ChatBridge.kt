@@ -742,16 +742,17 @@ class ChatBridge(
             if (uid <= 0) return;
             if (uid === vFrames.own) vFrames.seenOwn++;
             else { vFrames.own = uid; vFrames.seenOwn = 1; DeliChat.log('voice: own audio id ' + uid); }
-            // Two audio frames in a row with one id is enough to trust it, and from there
-            // the room's own guard can be named with the id it should have had all along.
-            if (vFrames.seenOwn === 2 && vEngine) {
+            // A frame this page sent itself cannot belong to anybody else, so one send is
+            // enough: the echo filter used to wait for a second frame, and the first
+            // thing anyone heard after unmuting was themselves.
+            if (vFrames.seenOwn === 1 && vEngine) {
               try { vEngine.setOwnUserId(uid); } catch (e) {}
             }
           }
 
           /** True for the frames of this account's own microphone on their way back. */
           function ownAudioFrame(data) {
-            if (vFrames.own <= 0 || vFrames.seenOwn < 2) return false;
+            if (vFrames.own <= 0 || vFrames.seenOwn < 1) return false;
             if (audioUid(data) !== vFrames.own) return false;
             vFrames.dropped++;
             if (vFrames.dropped === 1 || vFrames.dropped % 100 === 0) {
@@ -788,6 +789,35 @@ class ChatBridge(
                     } : fn);
                   }
                 });
+              }
+
+              // `onmessage` is only one of the two ways a page listens. A client built
+              // with addEventListener bypassed the filter completely — which is the other
+              // way your own voice came back. Listeners are mapped to their wrapped
+              // version so removeEventListener still removes the right one.
+              var add = proto.addEventListener;
+              var remove = proto.removeEventListener;
+              var wrappedFor = new Map();
+              if (typeof add === 'function' && typeof remove === 'function') {
+                proto.addEventListener = function (type, fn, opts) {
+                  if (type === 'message' && typeof fn === 'function') {
+                    var wrapped = function (ev) {
+                      if (ownAudioFrame(ev && ev.data)) return;
+                      return fn.call(this, ev);
+                    };
+                    wrappedFor.set(fn, wrapped);
+                    return add.call(this, type, wrapped, opts);
+                  }
+                  return add.apply(this, arguments);
+                };
+                proto.removeEventListener = function (type, fn, opts) {
+                  if (type === 'message' && typeof fn === 'function' && wrappedFor.has(fn)) {
+                    var wrapped = wrappedFor.get(fn);
+                    wrappedFor.delete(fn);
+                    return remove.call(this, type, wrapped, opts);
+                  }
+                  return remove.apply(this, arguments);
+                };
               }
               DeliChat.log('voice: sockets filtered');
               return true;
