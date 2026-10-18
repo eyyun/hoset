@@ -362,6 +362,72 @@ class DeliRepository(
      * `/contact` is a single `message` textarea that the site's own JavaScript posts to
      * the page itself, so the app can offer it natively instead of hosting the page.
      */
+    /* ---------------------------------------------------------------- */
+    /*  What a profile offers: follow, mute, block                      */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * The three verbs a site profile carries, at the routes the site itself posts to.
+     *
+     * All of them are POST-only — a GET answers 405 — and all of them take the account in
+     * the path except blocking, which names it in the form instead. Nothing about the
+     * request is guessed from a button label: the paths came from the site's own strings
+     * (`/follow/`, `/unfollow/`, `/block_user`, `/mute_notifs/`) and were confirmed to
+     * answer 405 on GET and 302-to-login on POST, which is what an authenticated endpoint
+     * looks like from outside.
+     */
+    suspend fun followUser(name: String, follow: Boolean): ActionResult {
+        ensureAntiforgery()
+        val user = encodeSegment(name)
+        val path = if (follow) "/follow/$user" else "/unfollow/$user"
+        val res = http.postForm(path, emptyList(), referer = "/@$user")
+        cache.clear()
+        return interpret(res, tr("Takip"))
+    }
+
+    /** Notifications from one account, on or off. The site keys it by the account's id. */
+    suspend fun muteUserNotifications(id: String, mute: Boolean): ActionResult {
+        ensureAntiforgery()
+        val path = if (mute) "/mute_notifs/${encodeSegment(id)}" else "/unmute_notifs/${encodeSegment(id)}"
+        val res = http.postForm(path, emptyList(), referer = "/notifications")
+        cache.clear()
+        return interpret(res, tr("Bildirimler"))
+    }
+
+    /** Blocking has no id in the path, so the account travels in the form. */
+    suspend fun blockUser(name: String, block: Boolean): ActionResult {
+        ensureAntiforgery()
+        val path = if (block) "/block_user" else "/unblock_user"
+        val res = http.postForm(path, listOf("username" to name), referer = "/@${encodeSegment(name)}")
+        cache.clear()
+        return interpret(res, tr("Engel"))
+    }
+
+    /** One path segment, escaped the way a browser escapes it. */
+    private fun encodeSegment(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+    /**
+     * `/notifications`, as the site renders it.
+     *
+     * Not cached for long: the bell is a "how many are waiting" question, and a stale
+     * answer there is the same as a wrong one. Thirty seconds is enough to stop a screen
+     * re-opening from asking twice.
+     */
+    suspend fun notifications(force: Boolean = true): NotificationPage =
+        HtmlParser.parseNotifications(page("/notifications", force = force, ttlMs = 30_000))
+
+    /**
+     * "Mark all notifications as read" — the button on `/notifications` calls
+     * `postToastReload(this, '/clear')`, so this is the same POST without the reload.
+     */
+    suspend fun clearNotifications(): ActionResult {
+        ensureAntiforgery()
+        val res = http.postForm("/clear", emptyList(), referer = "/notifications")
+        cache.clear()
+        return interpret(res, tr("Bildirimler"))
+    }
+
     suspend fun contact(message: String): ActionResult {
         ensureAntiforgery()
         val res = http.postForm("/contact", listOf("message" to message), referer = "/contact")
@@ -369,38 +435,32 @@ class DeliRepository(
     }
 
     /**
-     * Where the site's own picture upload actually goes.
+     * The two picture forms on `/settings`, as the site itself sends them.
      *
-     * Not the `action` its form names: that route (`/settings/images/profile`) is the
-     * avatar-render path and answers 500 today — "Avatars are temporarily disabled — the
-     * render server isn't configured" — which is exactly how an upload can look like it
-     * did nothing. The site's own JavaScript posts the picture to the personal-settings
-     * endpoint instead, with the file under the same `profile` part, and that request is
-     * the one the server answers with `Saved!`. Captured from the browser and then
-     * replayed against the live site with a real session; see the temporary test.
+     * Captured from the browser (delidehset.har, 18 Oct 2026): each is a plain multipart
+     * POST to **its own** action — `/settings/images/profile` and `/settings/images/banner`
+     * — carrying the antiforgery token and one file part named `profile` or `banner`. A
+     * profile upload answers `{"meta":{"status":true,…},"data":{"profileurl":
+     * "/uploads/…-profile-….jpg"}}` and the page then shows the new file.
+     *
+     * Posting that same part to `/settings/personal` — which the outer settings form on the
+     * page happens to accept — answers `{"message":"Saved!"}`, stores no picture, and saves
+     * the bio and pronouns it was *not* given, i.e. blanks them. That is exactly how an
+     * upload can report success, change nothing, and quietly eat the bio: which is what
+     * this app did until the HAR showed the two requests side by side.
      */
-    private val picturePath = "/settings/personal"
+    private suspend fun pictureEndpoint(kind: String): Pair<String, String> = uploadTarget(kind)
 
-    suspend fun uploadProfileImage(fileName: String, contentType: String, bytes: ByteArray): ActionResult =
-        settingsUpload(
-            picturePath,
-            uploadTarget("profile").second,
-            fileName,
-            contentType,
-            bytes,
-            referer = picturePath,
-        )
+    suspend fun uploadProfileImage(fileName: String, contentType: String, bytes: ByteArray): ActionResult {
+        val (path, field) = pictureEndpoint("profile")
+        return settingsUpload(path, field, fileName, contentType, bytes, referer = "/settings/personal")
+    }
 
-    /** The banner goes the same way, with the same field name the page gives it. */
-    suspend fun uploadBanner(fileName: String, contentType: String, bytes: ByteArray): ActionResult =
-        settingsUpload(
-            picturePath,
-            uploadTarget("banner").second,
-            fileName,
-            contentType,
-            bytes,
-            referer = picturePath,
-        )
+    /** The banner is the same request against its own route; only the part name differs. */
+    suspend fun uploadBanner(fileName: String, contentType: String, bytes: ByteArray): ActionResult {
+        val (path, field) = pictureEndpoint("banner")
+        return settingsUpload(path, field, fileName, contentType, bytes, referer = "/settings/personal")
+    }
 
     /** What the live settings page says about its own picture forms; [] when unreadable. */
     private var imageForms: Map<String, Pair<String, String>>? = null
@@ -412,7 +472,9 @@ class DeliRepository(
      * build where that page cannot be read at all.
      */
     private suspend fun uploadTarget(kind: String): Pair<String, String> {
-        val discovered = imageForms ?: runCatching { HtmlParser.parseImageUploadForms(page("/settings")) }
+        // `/settings/personal` is the page the browser actually lands on (the HAR's own
+        // requests say so); `/settings` only redirects there, so ask for the real one.
+        val discovered = imageForms ?: runCatching { HtmlParser.parseImageUploadForms(page("/settings/personal")) }
             .getOrDefault(emptyMap())
             .also {
                 imageForms = it
@@ -455,8 +517,10 @@ class DeliRepository(
                 "${res.contentType} loc=${res.location} " +
                 "text=${HtmlParser.stripTags(res.body).replace(Regex("\\s+"), " ").take(400)}",
         )
-        return interpret(res)
+        return interpretPicture(res)
     }
+
+    private fun interpretPicture(res: DeliResponse): ActionResult = interpretPictureResponse(res)
 
     suspend fun submitPost(
         form: DiscoveredForm?,
@@ -661,6 +725,43 @@ internal fun commentFields(
  * JSON body (`{error}` or a payload such as `{cid}`).
  */
 private val actionJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+/**
+ * What a picture upload actually did.
+ *
+ * The server's shape here is `{meta:{status, messages}, data:{profileurl}}` (a banner
+ * answers the same way under its own key), and `data` is the proof a file was stored. A
+ * 200 with a cheerful message is *not* proof: `/settings/personal` — the outer form on the
+ * settings page — answers `{"message":"Saved!"}` to a request that carries a picture it
+ * ignores, which is how the app could report a change that never happened. So a JSON
+ * answer without a stored URL is treated as a failure, never as a silent success.
+ */
+internal fun interpretPictureResponse(res: DeliResponse): ActionResult {
+    if (res.isJson) {
+        val root = runCatching { actionJson.parseToJsonElement(res.body).jsonObject }.getOrNull()
+        if (root != null) {
+            val meta = root["meta"] as? kotlinx.serialization.json.JsonObject
+            val status = runCatching { meta?.get("status")?.jsonPrimitive?.content }.getOrNull()
+            val message = runCatching {
+                (meta?.get("messages") as? kotlinx.serialization.json.JsonArray)
+                    ?.firstOrNull()?.jsonPrimitive?.content
+            }.getOrNull()?.takeIf { it.isNotBlank() && it != "[]" }
+            val url = runCatching {
+                (root["data"] as? kotlinx.serialization.json.JsonObject)
+                    ?.let { d -> (d["profileurl"] ?: d["bannerurl"])?.jsonPrimitive?.content }
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+
+            if (url != null) return ActionResult(true, null, res)
+            return ActionResult(
+                ok = false,
+                message = message
+                    ?: if (status == "false") tr("Sunucu görseli kabul etmedi.") else tr("Görsel kaydedilmedi."),
+                raw = res,
+            )
+        }
+    }
+    return interpretAction(res, tr("Görsel"))
+}
 
 internal fun interpretAction(res: DeliResponse, what: String = tr("İşlem")): ActionResult {
     run {

@@ -361,6 +361,87 @@ internal val phrases: List<Phrase> = listOf(
     Phrase("Derin Sular", "Deep water", "Tiefes Wasser", "Aguas profundas", "Eaux profondes", "Águas profundas", "Глубокие воды", "深い海"),
     Phrase("Pamuk Şeker", "Cotton candy", "Zuckerwatte", "Algodón de azúcar", "Barbe à papa", "Algodão-doce", "Сахарная вата", "綿あめ"),
     Phrase("Neon Gece", "Neon night", "Neonnacht", "Noche de neón", "Nuit néon", "Noite neon", "Неоновая ночь", "ネオンの夜"),
+
+    /* ------------------------------------------------ what a kit says about itself */
+    Phrase("çerçeveli", "outlined", "mit Rahmen", "con contorno", "avec contour", "com contorno", "с рамкой", "枠線"),
+    Phrase("gölgeli", "shadowed", "mit Schatten", "con sombra", "avec ombre", "com sombra", "с тенью", "影付き"),
+    Phrase("düz", "flat", "flach", "plano", "plat", "plano", "плоский", "フラット"),
+    Phrase("yuvarlak", "round", "rund", "redondo", "rond", "redondo", "круглый", "丸型"),
+    Phrase("köşeli", "squared", "kantig", "cuadrado", "carré", "quadrado", "угловатый", "角ばった"),
+    Phrase("dolu", "filled", "gefüllt", "relleno", "plein", "preenchido", "залитый", "塗り"),
+    Phrase("yumuşak", "soft", "weich", "suave", "doux", "suave", "мягкий", "ソフト"),
+    Phrase("ferah", "roomy", "luftig", "amplio", "aéré", "espaçoso", "просторный", "ゆったり"),
+    Phrase("sık", "compact", "kompakt", "compacto", "compact", "compacto", "плотный", "密集"),
+
+    /* ------------------------------------------------ the profile page's own bits */
+    Phrase("Operatör", "Operator", "Operator", "Operador", "Opérateur", "Operador", "Оператор", "オペレーター"),
+    Phrase("Moderasyon geçmişi", "Moderation history", "Moderationsverlauf", "Historial de moderación", "Historique de modération", "Histórico de moderação", "История модерации", "モデレーション履歴"),
+    Phrase("Kullanıcı kimliği: {0}", "User ID: {0}", "Benutzer-ID: {0}", "ID de usuario: {0}", "Identifiant : {0}", "ID do usuário: {0}", "ID пользователя: {0}", "ユーザーID: {0}"),
+    Phrase("Coin", "coins", "Münzen", "monedas", "pièces", "moedas", "монеты", "コイン"),
+
+    /* ------------------------------------------------ the sample the store draws with */
+    Phrase("Örnek gönderi", "Sample post", "Beispielbeitrag", "Publicación de ejemplo", "Publication d'exemple", "Publicação de exemplo", "Пример поста", "サンプル投稿"),
+    Phrase("Tema önizlemesi", "Theme preview", "Design-Vorschau", "Vista previa del tema", "Aperçu du thème", "Prévia do tema", "Предпросмотр темы", "テーマのプレビュー"),
+
+    /* ------------------------------------------------ profile actions */
+    Phrase("Takip et", "Follow", "Folgen", "Seguir", "Suivre", "Seguir", "Подписаться", "フォロー"),
+    Phrase("Takip bırak", "Unfollow", "Nicht mehr folgen", "Dejar de seguir", "Ne plus suivre", "Deixar de seguir", "Отписаться", "フォロー解除"),
+    Phrase("Takip edildi.", "You are following them.", "Du folgst jetzt.", "Ahora lo sigues.", "Tu le suis maintenant.", "Agora você o segue.", "Вы подписались.", "フォローしました。"),
+    Phrase("Takipten çıkıldı.", "You unfollowed them.", "Du folgst nicht mehr.", "Has dejado de seguirlo.", "Tu ne le suis plus.", "Você deixou de segui-lo.", "Вы отписались.", "フォローを解除しました。"),
+    Phrase("Sessize al", "Mute", "Stummschalten", "Silenciar", "Mettre en sourdine", "Silenciar", "Отключить уведомления", "ミュート"),
+    Phrase("Bildirimleri aç", "Unmute", "Stummschaltung aus", "Activar avisos", "Réactiver les notifications", "Reativar notificações", "Включить уведомления", "ミュート解除"),
+    Phrase("Bu hesabın bildirimleri sessize alındı.", "Muted that account's notifications.", "Benachrichtigungen dieses Kontos stummgeschaltet.", "Avisos de esa cuenta silenciados.", "Notifications de ce compte en sourdine.", "Notificações dessa conta silenciadas.", "Уведомления этого аккаунта отключены.", "このアカウントの通知をミュートしました。"),
+    Phrase("Bu hesabın bildirimleri açıldı.", "That account's notifications are back on.", "Benachrichtigungen dieses Kontos wieder an.", "Avisos de esa cuenta reactivados.", "Notifications de ce compte réactivées.", "Notificações dessa conta reativadas.", "Уведомления этого аккаунта снова включены.", "このアカウントの通知を再開しました。"),
+    Phrase("Engelle", "Block", "Blockieren", "Bloquear", "Bloquer", "Bloquear", "Заблокировать", "ブロック"),
+    Phrase("Engeli kaldır", "Unblock", "Blockierung aufheben", "Desbloquear", "Débloquer", "Desbloquear", "Разблокировать", "ブロック解除"),
+    Phrase("Bu hesabı engelledin.", "You blocked that account.", "Du hast dieses Konto blockiert.", "Has bloqueado esa cuenta.", "Tu as bloqué ce compte.", "Você bloqueou essa conta.", "Вы заблокировали этот аккаунт.", "このアカウントをブロックしました。"),
+    Phrase("Engel kaldırıldı.", "Unblocked.", "Blockierung aufgehoben.", "Desbloqueado.", "Débloqué.", "Desbloqueado.", "Блокировка снята.", "ブロックを解除しました。"),
+    Phrase("Engel değiştirilemedi.", "Could not change the block.", "Blockierung konnte nicht geändert werden.", "No se pudo cambiar el bloqueo.", "Impossible de changer le blocage.", "Não foi possível mudar o bloqueio.", "Не удалось изменить блокировку.", "ブロックを変更できませんでした。"),
+    Phrase("İşlem tamamlanamadı.", "That did not go through.", "Das ging nicht durch.", "No se pudo completar.", "L'opération n'a pas abouti.", "Não foi concluído.", "Не удалось выполнить.", "完了できませんでした。"),
+
+    /* ------------------------------------------------ notifications */
+    Phrase("Henüz bildirim yok.", "No notifications yet.", "Noch keine Benachrichtigungen.", "Todavía no hay notificaciones.", "Aucune notification pour l'instant.", "Ainda não há notificações.", "Уведомлений пока нет.", "通知はまだありません。"),
+    Phrase("Biri size yanıt verdiğinde veya sizden bahsettiğinde burada görünür.", "It shows up here when someone replies to you or mentions you.", "Hier erscheint es, wenn dir jemand antwortet oder dich erwähnt.", "Aparece aquí cuando alguien te responde o te menciona.", "Il apparaît ici quand quelqu'un te répond ou te mentionne.", "Aparece aqui quando alguém responde ou menciona você.", "Здесь появятся ответы и упоминания вас.", "返信やメンションがあるとここに表示されます。"),
+    Phrase("Tümünü okundu işaretle", "Mark all as read", "Alle als gelesen markieren", "Marcar todo como leído", "Tout marquer comme lu", "Marcar tudo como lido", "Отметить все как прочитанные", "すべて既読にする"),
+    Phrase("{0} okunmamış", "{0} unread", "{0} ungelesen", "{0} sin leer", "{0} non lues", "{0} não lidas", "{0} непрочитанных", "未読 {0}件"),
+    Phrase("Kapalı — hiçbir bildirim gösterilmez.", "Off — nothing is shown.", "Aus — nichts wird angezeigt.", "Desactivado: no se muestra nada.", "Désactivé : rien n'est affiché.", "Desligado: nada é mostrado.", "Выключено — ничего не показывается.", "オフ — 何も表示されません。"),
+    Phrase("İzin yok. Açmak için dokun.", "No permission. Tap to allow it.", "Keine Berechtigung. Tippe, um sie zu erlauben.", "Sin permiso. Toca para concederlo.", "Pas d'autorisation. Touche pour l'accorder.", "Sem permissão. Toque para conceder.", "Нет разрешения. Коснитесь, чтобы выдать.", "権限がありません。タップして許可してください。"),
+    Phrase("Açık — yanıtlar ve bahsetmeler bildirim olarak gelir.", "On — replies and mentions arrive as notifications.", "An — Antworten und Erwähnungen kommen als Benachrichtigung.", "Activado: respuestas y menciones llegan como notificación.", "Activé : réponses et mentions arrivent en notification.", "Ligado: respostas e menções chegam como notificação.", "Включено — ответы и упоминания приходят уведомлениями.", "オン — 返信とメンションが通知で届きます。"),
+
+    /* ------------------------------------------------ pictures */
+    Phrase("Görsel", "Image", "Bild", "Imagen", "Image", "Imagem", "Изображение", "画像"),
+    Phrase("Görsel kaydedilmedi.", "The picture was not saved.", "Das Bild wurde nicht gespeichert.", "La imagen no se guardó.", "L'image n'a pas été enregistrée.", "A imagem não foi salva.", "Изображение не сохранено.", "画像は保存されませんでした。"),
+    Phrase("Sunucu görseli kabul etmedi.", "The server refused the picture.", "Der Server hat das Bild abgelehnt.", "El servidor rechazó la imagen.", "Le serveur a refusé l'image.", "O servidor recusou a imagem.", "Сервер отклонил изображение.", "サーバーが画像を受け付けませんでした。"),
+
+    /* ------------------------------------------------ Hoset's own settings */
+    Phrase("Hoset Ayarları", "Hoset settings", "Hoset-Einstellungen", "Ajustes de Hoset", "Réglages de Hoset", "Ajustes do Hoset", "Настройки Hoset", "Hosetの設定"),
+    Phrase("Sürüm, güncelleme ve lisans", "Version, updates and licence", "Version, Updates und Lizenz", "Versión, actualizaciones y licencia", "Version, mises à jour et licence", "Versão, atualizações e licença", "Версия, обновления и лицензия", "バージョン・更新・ライセンス"),
+    Phrase("Uygulama", "App", "App", "Aplicación", "App", "Aplicativo", "Приложение", "アプリ"),
+    Phrase("Hakkında", "About", "Über", "Acerca de", "À propos", "Sobre", "О приложении", "このアプリについて"),
+    Phrase("Sürüm {0} (yapı {1})", "Version {0} (build {1})", "Version {0} (Build {1})", "Versión {0} (compilación {1})", "Version {0} (build {1})", "Versão {0} (build {1})", "Версия {0} (сборка {1})", "バージョン {0}（ビルド {1}）"),
+    Phrase("{0} kit içinden {1}", "{1} of {0} kits", "{1} von {0} Kits", "{1} de {0} kits", "{1} sur {0} kits", "{1} de {0} kits", "{1} из {0} наборов", "{0}種類中 {1}"),
+    Phrase("Güncellemeyi denetle", "Check for updates", "Nach Updates suchen", "Buscar actualizaciones", "Rechercher des mises à jour", "Verificar atualizações", "Проверить обновления", "更新を確認"),
+    Phrase("İndiriliyor… %{0}", "Downloading… {0}%", "Wird geladen… {0} %", "Descargando… {0} %", "Téléchargement… {0} %", "Baixando… {0}%", "Загрузка… {0} %", "ダウンロード中… {0}%"),
+    Phrase("Yeni sürüm {0} hazır.", "Version {0} is ready.", "Version {0} ist bereit.", "La versión {0} está lista.", "La version {0} est prête.", "A versão {0} está pronta.", "Версия {0} готова.", "バージョン {0} を用意しました。"),
+    Phrase("En son sürümü kullanıyorsun.", "You are on the latest version.", "Du hast die neueste Version.", "Ya tienes la última versión.", "Tu as la dernière version.", "Você está na versão mais recente.", "У вас последняя версия.", "最新版です。"),
+    Phrase("Denetleniyor…", "Checking…", "Wird geprüft…", "Comprobando…", "Vérification…", "Verificando…", "Проверка…", "確認中…"),
+    Phrase("Kurulum açıldı", "Installer opened", "Installation geöffnet", "Instalador abierto", "Installation ouverte", "Instalador aberto", "Установщик открыт", "インストーラーを開きました"),
+    Phrase("Güncellemeler GitHub sürümlerinden gelir.", "Updates come from GitHub releases.", "Updates kommen von GitHub-Releases.", "Las actualizaciones vienen de las versiones de GitHub.", "Les mises à jour viennent des versions GitHub.", "As atualizações vêm das releases do GitHub.", "Обновления приходят из релизов GitHub.", "更新はGitHubのリリースから届きます。"),
+    Phrase("Delidehşet", "Delidehset", "Delidehset", "Delidehset", "Delidehset", "Delidehset", "Delidehset", "Delidehset"),
+    Phrase("Kaynak kodu", "Source code", "Quelltext", "Código fuente", "Code source", "Código-fonte", "Исходный код", "ソースコード"),
+    Phrase("Sürüm notları", "Release notes", "Versionshinweise", "Notas de la versión", "Notes de version", "Notas da versão", "Заметки о выпуске", "リリースノート"),
+    Phrase("MIT lisansı", "MIT licence", "MIT-Lizenz", "Licencia MIT", "Licence MIT", "Licença MIT", "Лицензия MIT", "MITライセンス"),
+    Phrase("Açık kaynak, garanti yok.", "Open source, no warranty.", "Open Source, keine Gewähr.", "Código abierto, sin garantía.", "Open source, sans garantie.", "Código aberto, sem garantia.", "Открытый код, без гарантий.", "オープンソース、無保証。"),
+    Phrase(
+        "Bu uygulama delidehset.com'un resmi istemcisi değildir; sitenin herkese açık sayfalarını okuyan, gönüllü yazılmış bir istemcidir.",
+        "This app is not an official delidehset.com client; it is a volunteer-built client that reads the site's public pages.",
+        "Diese App ist kein offizieller Client von delidehset.com, sondern ein freiwillig gebauter Client, der die öffentlichen Seiten der Seite liest.",
+        "Esta app no es un cliente oficial de delidehset.com; es un cliente hecho por voluntarios que lee las páginas públicas del sitio.",
+        "Cette app n'est pas un client officiel de delidehset.com ; c'est un client bénévole qui lit les pages publiques du site.",
+        "Este app não é um cliente oficial do delidehset.com; é um cliente feito por voluntários que lê as páginas públicas do site.",
+        "Это приложение — не официальный клиент delidehset.com, а сделанный волонтёрами клиент, читающий открытые страницы сайта.",
+        "このアプリは delidehset.com の公式クライアントではありません。有志が作った、サイトの公開ページを読むクライアントです。",
+    ),
 )
 
 /**

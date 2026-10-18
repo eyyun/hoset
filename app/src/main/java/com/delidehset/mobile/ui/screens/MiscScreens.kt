@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
@@ -87,6 +88,7 @@ import com.delidehset.mobile.vm.BadgesViewModel
 import com.delidehset.mobile.vm.RandomViewModel
 import com.delidehset.mobile.vm.TableViewModel
 import com.delidehset.mobile.vm.UsersViewModel
+import com.delidehset.mobile.ui.theme.kitSurface
 
 /* ------------------------------------------------------------------ */
 /*  Generic table page: admins, moderation log, leaderboard, stats     */
@@ -333,6 +335,8 @@ fun SettingsScreen(
     onThemeChange: (Palette) -> Unit = {},
     /** Opens the store, where every kit is shown with a preview of itself. */
     onOpenThemeStore: () -> Unit = {},
+    /** Hoset's own settings: version, updates, licence — the install, not the account. */
+    onOpenHosetSettings: () -> Unit = {},
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -394,9 +398,7 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(DeliShapes.card)
-                .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, DeliShapes.card)
+                .kitSurface(padding = 0.dp),
         ) {
             Column {
                 SettingsRowItem(
@@ -427,9 +429,7 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(DeliShapes.card)
-                .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, DeliShapes.card),
+                .kitSurface(padding = 0.dp),
         ) {
             var open by remember { mutableStateOf(false) }
             Row(
@@ -494,9 +494,7 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(DeliShapes.card)
-                .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, DeliShapes.card),
+                .kitSurface(padding = 0.dp),
         ) {
             Column {
                 Row(
@@ -578,17 +576,28 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(DeliShapes.card)
-                .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, DeliShapes.card),
+                .kitSurface(padding = 0.dp),
         ) {
-            SettingsRowItem(
-                icon = Icons.Filled.Palette,
-                iconTint = DeliColors.Primary,
-                title = t("Tema Mağazası"),
-                subtitle = t("On bir kit, her biri kendi önizlemesiyle"),
-                onClick = onOpenThemeStore,
-            )
+            Column {
+                SettingsRowItem(
+                    icon = Icons.Filled.Palette,
+                    iconTint = DeliColors.Primary,
+                    title = t("Tema Mağazası"),
+                    subtitle = t("On bir kit, her biri kendi önizlemesiyle"),
+                    onClick = onOpenThemeStore,
+                )
+
+                HorizontalDivider(color = DeliColors.Border)
+
+                // The install's own settings, next to the look: version, updates, licence.
+                SettingsRowItem(
+                    icon = Icons.Filled.Info,
+                    iconTint = DeliColors.Blue,
+                    title = t("Hoset Ayarları"),
+                    subtitle = t("Sürüm, güncelleme ve lisans"),
+                    onClick = onOpenHosetSettings,
+                )
+            }
         }
 
         // Section Title: Session
@@ -598,9 +607,7 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(DeliShapes.card)
-                .background(DeliColors.Surface)
-                .border(1.dp, DeliColors.Border, DeliShapes.card)
+                .kitSurface(padding = 0.dp)
                 .clickable { showLogoutDialog = true }
                 .padding(14.dp),
         ) {

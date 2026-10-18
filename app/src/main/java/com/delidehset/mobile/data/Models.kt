@@ -144,6 +144,14 @@ data class StatsPage(
     val sections: List<Pair<String, List<KeyValue>>>,
 )
 
+/** One of the tabs a profile page carries: the wall, its posts, its comments. */
+data class ProfileTab(
+    val label: String,
+    val href: String,
+    val count: Int? = null,
+    val active: Boolean = false,
+)
+
 data class UserProfile(
     val id: String,
     val name: String,
@@ -154,6 +162,20 @@ data class UserProfile(
     val stats: List<KeyValue>,
     val isFollowing: Boolean,
     val postDays: List<DailyCount> = emptyList(),
+    /**
+     * The rest of the page the site renders, so the screen is the whole profile rather
+     * than the part of it that happened to be read first: the banner behind the avatar,
+     * the operator mark, the counters as numbers (not just labels), the moderation
+     * history link, the page's own tabs, and whether the viewer can moderate here.
+     */
+    val bannerUrl: String? = null,
+    val operator: Boolean = false,
+    val followers: Int? = null,
+    val following: Int? = null,
+    val moderationHref: String? = null,
+    val tabs: List<ProfileTab> = emptyList(),
+    val muted: Boolean = false,
+    val canModerate: Boolean = false,
 )
 
 data class DailyCount(val label: String, val count: Int)
@@ -212,4 +234,34 @@ data class SecuritySettings(
 data class AccountSettings(
     val personal: PersonalSettings = PersonalSettings(),
     val security: SecuritySettings = SecuritySettings(),
+)
+
+/**
+ * One row of `/notifications`.
+ *
+ * The site renders each one as a `list-group-item`: a `new` badge when it has not been
+ * read, an age, a `context` link straight to the comment, the post it happened on, and
+ * the comment body (or the mention text) at the bottom.
+ */
+data class DeliNotification(
+    /** The comment (or notice) it points at; the row has no id of its own. */
+    val id: String,
+    val unread: Boolean,
+    val ago: String,
+    /** Where the `context` link goes — usually `/post/<post>/comment/<comment>`. */
+    val href: String?,
+    val postTitle: String?,
+    val postHref: String?,
+    /** The comment body, still as markup; the screen decides how to draw it. */
+    val bodyHtml: String,
+) {
+    /** What a system notification says when there is nothing to quote. */
+    val text: String get() = HtmlParser.stripTags(bodyHtml).ifBlank { postTitle.orEmpty() }
+}
+
+/** The `/notifications` page: the rows, plus the bell's number from the same response. */
+data class NotificationPage(
+    val items: List<DeliNotification> = emptyList(),
+    /** The header bell's count; the site clamps it to "9+" once it gets big. */
+    val unreadCount: Int = 0,
 )

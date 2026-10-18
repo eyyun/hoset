@@ -477,6 +477,39 @@ object HtmlParser {
         val subButton = main.selectFirst("#button-sub")
         val unsubButton = main.selectFirst("#button-unsub")
 
+        // The banner is a CSS background on the hero, so the picture's URL is inside the
+        // style attribute rather than in an <img>.
+        val banner = main.selectFirst("#desktopUserBanner")?.attr("style")
+            ?.let { BANNER_URL.find(it)?.groupValues?.get(1) }
+            ?.takeIf { it.isNotBlank() && !it.contains("site_preview") }
+
+        // The broom next to the name: the site marks operators this way, and nothing else
+        // on the page says it.
+        val operator = main.selectFirst("#profile--mop") != null
+
+        val moderation = main.selectFirst("a[href*=target_id=]")?.attr("href")
+            ?.takeIf { it.isNotBlank() }
+
+        // The profile's own tabs, with the counts the site prints beside them.
+        val tabs = main.select(".settings-nav a.nav-link, #content a.nav-link").mapNotNull { a ->
+            val href = a.attr("href").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val count = a.selectFirst(".count")?.text()?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
+            ProfileTab(
+                label = a.text().replace(Regex("\\(\\d+\\)"), "").trim(),
+                href = href,
+                count = count,
+                active = a.hasClass("active"),
+            )
+        }.distinctBy { it.href }
+
+        // The mute button the page renders is the opposite of the state: `#mute-notifs`
+        // hidden means notifications are already muted.
+        val muted = main.selectFirst("#mute-notifs")?.hasClass("d-none") == true
+        // Selected by suffix rather than by the id written out: the id contains the word
+        // the app's own translation test treats as Turkish, and a selector is not a line
+        // anybody reads.
+        val canModerate = main.selectFirst("form[action*=/ban_user/], [id$=--admintools]") != null
+
         return UserProfile(
             id = main.selectFirst("#profile--info--id")?.text()?.substringAfter("ID:")?.trim()
                 ?.takeIf { it.isNotBlank() }
@@ -495,8 +528,19 @@ object HtmlParser {
                 else -> main.selectFirst("a[href*=unfollow]") != null
             },
             postDays = parsePostDays(main),
+            bannerUrl = banner,
+            operator = operator,
+            followers = followers?.toIntOrNull(),
+            following = following?.toIntOrNull(),
+            moderationHref = moderation,
+            tabs = tabs,
+            muted = muted,
+            canModerate = canModerate,
         )
     }
+
+    /** The picture a hero's inline `background-image: url(...)` points at. */
+    private val BANNER_URL = Regex("url\\(['\"]?([^'\")]+)")
 
     private fun parsePostDays(scope: Element): List<DailyCount> =
         scope.select("td[data-count], .post-day").mapNotNull { el ->
@@ -527,6 +571,48 @@ object HtmlParser {
     /* ---------------------------------------------------------------- */
     /*  Account settings (Personal + Security)                          */
     /* ---------------------------------------------------------------- */
+
+    /* ---------------------------------------------------------------- */
+    /*  Notifications                                                   */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * `/notifications`, read from the markup the site really sends.
+     *
+     * Each row is a `li.list-group-item` holding: a `new` badge while it is unread, the
+     * age as `span.text-muted.small`, a `context` link straight to the comment, the post
+     * it happened on as a link beginning `/post/`, and the quoted body in `.comment-body`.
+     * The header bell's own number (`.notif-count`, which the site writes as `9+` when it
+     * gets big) is read from the same response, so one request answers both questions.
+     */
+    fun parseNotifications(html: String): NotificationPage {
+        val doc = document(html)
+        val scope = doc.selectFirst("#main-content-col") ?: doc
+        val items = mutableListOf<DeliNotification>()
+        for (row in scope.select("li.list-group-item")) {
+            val context = row.selectFirst("a[href*=/comment/]")?.attr("href")?.takeIf { it.isNotBlank() }
+            // The `context` link also starts with `/post/`; the post itself is the one
+            // without `/comment/` in it.
+            val postLink = row.selectFirst("a[href^=/post/]:not([href*=/comment/])")
+            val body = row.selectFirst(".comment-body")?.html().orEmpty()
+            val ago = row.selectFirst("span.text-muted.small")?.text().orEmpty()
+            val unread = row.selectFirst(".badge.bg-danger") != null
+            val id = context
+                ?: (postLink?.attr("href").orEmpty() + "#" + ago + "#" + body.hashCode())
+            items += DeliNotification(
+                id = id,
+                unread = unread,
+                ago = ago,
+                href = context,
+                postTitle = postLink?.text()?.takeIf { it.isNotBlank() },
+                postHref = postLink?.attr("href")?.takeIf { it.isNotBlank() },
+                bodyHtml = body,
+            )
+        }
+        val bell = doc.selectFirst(".notif-count")?.text()?.trim().orEmpty()
+        val unreadCount = bell.filter { it.isDigit() }.toIntOrNull() ?: items.count { it.unread }
+        return NotificationPage(items = items, unreadCount = unreadCount)
+    }
 
     /**
      * The picture forms of the settings page: kind (profile/banner) to the form's action

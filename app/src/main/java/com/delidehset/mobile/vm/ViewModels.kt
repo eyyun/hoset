@@ -13,6 +13,7 @@ import com.delidehset.mobile.data.FeedSort
 import com.delidehset.mobile.data.Hole
 import com.delidehset.mobile.data.LangStore
 import com.delidehset.mobile.data.LoginResult
+import com.delidehset.mobile.data.NotificationPage
 import com.delidehset.mobile.data.NotSignedInException
 import com.delidehset.mobile.data.PersonalSettings
 import com.delidehset.mobile.data.PostDetail
@@ -485,6 +486,68 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
 
     private var loadedName: String? = null
 
+    /** True while a follow/mute/block request is in flight, so the buttons stay put. */
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    fun consumeMessage() { _message.value = null }
+
+    /** The three things a profile page can do to another account, all in one place. */
+    fun follow(name: String, follow: Boolean) = act(name, tr(if (follow) "Takip edildi." else "Takipten çıkıldı.")) {
+        repo.followUser(name, follow)
+    }
+
+    fun mute(name: String, id: String, mute: Boolean) = act(
+        name,
+        tr(if (mute) "Bu hesabın bildirimleri sessize alındı." else "Bu hesabın bildirimleri açıldı."),
+    ) {
+        repo.muteUserNotifications(id, mute)
+    }
+
+    fun block(name: String, block: Boolean, onDone: (Boolean) -> Unit = {}) {
+        if (_busy.value) return
+        _busy.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.blockUser(name, block) }
+                .onSuccess { result ->
+                    if (result.ok) {
+                        _message.value = tr(if (block) "Bu hesabı engelledin." else "Engel kaldırıldı.")
+                        load(name, force = true)
+                        onDone(true)
+                    } else {
+                        _message.value = result.message ?: tr("Engel değiştirilemedi.")
+                        onDone(false)
+                    }
+                }
+                .onFailure {
+                    _message.value = DeliErrors.explain(it)
+                    onDone(false)
+                }
+            _busy.value = false
+        }
+    }
+
+    private fun act(name: String, success: String, call: suspend () -> ActionResult) {
+        if (_busy.value) return
+        _busy.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { call() }
+                .onSuccess { result ->
+                    if (result.ok) {
+                        _message.value = success
+                        load(name, force = true)
+                    } else {
+                        _message.value = result.message ?: tr("İşlem tamamlanamadı.")
+                    }
+                }
+                .onFailure { _message.value = DeliErrors.explain(it) }
+            _busy.value = false
+        }
+    }
+
     fun load(name: String, force: Boolean = false) {
         if (loadedName == name && !force) return
         loadedName = name
@@ -497,6 +560,52 @@ class ProfileViewModel(private val repo: DeliRepository) : ViewModel() {
                     _loading.value = false
                 }
                 .onFailure { e -> _error.value = DeliErrors.explain(e); _loading.value = false }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Notifications                                                      */
+/* ------------------------------------------------------------------ */
+
+data class NotificationsUiState(
+    val page: NotificationPage = NotificationPage(),
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
+/** The site's `/notifications` page, read and cleared from the app. */
+class NotificationsViewModel(private val repo: DeliRepository) : ViewModel() {
+
+    private val _state = MutableStateFlow(NotificationsUiState())
+    val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
+
+    private var started = false
+
+    fun load(force: Boolean = false) {
+        if (started && !force) return
+        started = true
+        _state.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.notifications(force = force) }
+                .onSuccess { page -> _state.value = NotificationsUiState(page = page) }
+                .onFailure { e -> _state.update { it.copy(loading = false, error = DeliErrors.explain(e)) } }
+        }
+    }
+
+    /** "Mark all notifications as read": the page's own button, without the reload. */
+    fun markAllRead() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.clearNotifications() }
+                .onSuccess { load(force = true) }
+                .onFailure { e -> _state.update { it.copy(error = DeliErrors.explain(e)) } }
+        }
+    }
+
+    /** The number the bell shows; fetched without opening the screen. */
+    fun unread(onCount: (Int) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.notifications(force = true) }.onSuccess { onCount(it.unreadCount) }
         }
     }
 }

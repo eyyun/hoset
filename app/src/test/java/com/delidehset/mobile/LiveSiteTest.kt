@@ -138,6 +138,17 @@ class LiveSiteTest {
     @Test
     fun `profile page yields a join date instead of the bio placeholder`() = runBlocking {
         val profile = repo.profile("admin")
+
+        // The whole profile page, not the part of it that was read first: the counters as
+        // numbers, the id, and the page's own tabs all come off the live page.
+        assertNotNull("takipçi sayısı okunmadı", profile.followers)
+        assertNotNull("takip sayısı okunmadı", profile.following)
+        assertTrue("kullanıcı kimliği boş", profile.id.isNotBlank())
+        assertTrue("profil sekmeleri okunmadı: ${profile.tabs}", profile.tabs.isNotEmpty())
+        assertTrue(
+            "sekmelerden biri aktif değil",
+            profile.tabs.any { it.active },
+        )
         assertEquals("profil adı korunmalı", "admin", profile.name)
 
         val joined = profile.joinedAgo

@@ -8,6 +8,7 @@ import com.delidehset.mobile.data.FormField
 import com.delidehset.mobile.data.HtmlParser
 import com.delidehset.mobile.data.commentFields
 import com.delidehset.mobile.data.interpretAction
+import com.delidehset.mobile.data.interpretPictureResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -151,5 +152,50 @@ class CommentAndActionTest {
         assertEquals("şu anki oy durumu", 1, c.viewerVote)
         assertEquals("sa", HtmlParser.stripTags(c.bodyHtml))
         assertFalse(c.isDeleted)
+    }
+
+    /* ----------------------- picture uploads ------------------------- */
+
+    /**
+     * The two answers the live site gave for the same bytes (delidehset.har, 18 Oct 2026):
+     * the picture route answered with the stored file's URL, and the personal-settings
+     * route answered "Saved!" without storing anything. Only the first one may count.
+     */
+    @Test
+    fun `a stored profile picture is a success and comes back with its url`() {
+        val res = DeliResponse(
+            200,
+            null,
+            "application/json; charset=utf-8",
+            "{\"meta\":{\"status\":true,\"messages\",\"details\":[]},\"data\":{\"profileurl\":\"/uploads/1792282348593-profile-01a131db.jpg\"}}",
+        )
+        assertTrue("görsel kaydedildi", interpretPictureResponse(res).ok)
+    }
+
+    @Test
+    fun `a cheerful message without a stored picture is a failure`() {
+        val res = DeliResponse(200, null, "application/json; charset=utf-8", "{\"message\":\"Saved!\"}")
+        val result = interpretPictureResponse(res)
+        assertFalse("kaydedilmeyen görsel başarı sayılmamalı", result.ok)
+        assertTrue("sebep yazılmalı", !result.message.isNullOrBlank())
+    }
+
+    @Test
+    fun `a refused picture carries the server's own word`() {
+        val res = DeliResponse(
+            200,
+            null,
+            "application/json; charset=utf-8",
+            "{\"meta\":{\"status\":false,\"messages\":[\"Görsel çok büyük.\"]},\"data\":null}",
+        )
+        val result = interpretPictureResponse(res)
+        assertFalse(result.ok)
+        assertEquals("Görsel çok büyük.", result.message)
+    }
+
+    @Test
+    fun `an nginx 413 is reported as a failure, not a save`() {
+        val res = DeliResponse(413, null, "text/html", "<html><h1>413 Request Entity Too Large</h1></html>")
+        assertFalse(interpretPictureResponse(res).ok)
     }
 }
