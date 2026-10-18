@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.delidehset.mobile.notify.HosetNotifications
+import com.delidehset.mobile.notify.NotificationPoller
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.SvgDecoder
@@ -17,6 +19,12 @@ class DeliApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+
+        // The site offers no push, so notifications are polled — the channel and the
+        // repeating alarm are set up here, on the way up, and the poll itself does nothing
+        // at all while there is no session to poll with.
+        HosetNotifications.channel(this)
+        NotificationPoller.schedule(this)
     }
 
     /**

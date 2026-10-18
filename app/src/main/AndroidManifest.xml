@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- The site has no push service, so notifications are polled and posted locally. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!--
         The voice room records and plays audio through the room page running inside the
         hidden WebView (see ChatBridge), so the app itself has to hold the recording
@@ -61,6 +65,20 @@
         <receiver
             android:name=".data.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- The notification poll, and the alarm that starts it again after a reboot. -->
+        <receiver
+            android:name=".notify.NotificationPollReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notify.NotificationBootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

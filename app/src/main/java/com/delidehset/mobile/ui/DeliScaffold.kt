@@ -33,9 +33,12 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -93,6 +96,10 @@ fun DeliScaffold(
     onBack: () -> Unit = {},
     /** Set on screens that should offer a way into settings from the top bar. */
     onOpenSettings: (() -> Unit)? = null,
+    /** The bell's number: unread notifications, as the site's own header counts them. */
+    unreadNotifications: Int = 0,
+    /** Set to put a bell in the top bar; absent on signed-out screens. */
+    onOpenNotifications: (() -> Unit)? = null,
     /** The app's own language, for the frame's own lines (the drawer, the bars). */
     lang: AppLang = AppLang.TR,
     floatingActionButton: @Composable () -> Unit = {},
@@ -179,6 +186,29 @@ fun DeliScaffold(
                                 )
                             }
                         }
+                        if (onOpenNotifications != null) {
+                            IconButton(onClick = onOpenNotifications) {
+                                BadgedBox(
+                                    badge = {
+                                        if (unreadNotifications > 0) {
+                                            Badge(containerColor = DeliColors.Danger) {
+                                                Text(
+                                                    text = if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
+                                                    fontSize = 9.sp,
+                                                )
+                                            }
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Notifications,
+                                        contentDescription = translate(lang, "Bildirimler"),
+                                        tint = DeliColors.OnBackground,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                            }
+                        }
                         if (onOpenSettings != null) {
                             IconButton(onClick = onOpenSettings) {
                                 Icon(
@@ -192,13 +222,22 @@ fun DeliScaffold(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = DeliColors.Surface),
                 )
+                // Kits that line their surfaces up carry a hairline under the bar; the
+                // ones that separate with air leave it out.
+                if (DeliColors.palette.dividers) {
+                    HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
+                }
             },
             bottomBar = {
                 // The bar is fixed: it neither disappears nor jumps up over the keyboard,
                 // which is what every app of this shape does. The keyboard simply covers
                 // it, and the content above (see the padding below) is lifted instead.
+                Column(modifier = Modifier.navigationBarsPadding()) {
+                if (DeliColors.palette.dividers) {
+                    HorizontalDivider(color = DeliColors.Border, thickness = 1.dp)
+                }
                 NavigationBar(
-                    modifier = Modifier.navigationBarsPadding(),
+                    modifier = Modifier,
                     windowInsets = WindowInsets(0, 0, 0, 0),
                     containerColor = DeliColors.Surface,
                     contentColor = DeliColors.OnBackground,
@@ -251,6 +290,7 @@ fun DeliScaffold(
                             )
                         },
                     )
+                }
                 }
             },
         ) { padding ->
@@ -419,7 +459,8 @@ private fun DrawerRow(
             .clip(DeliShapes.control)
             .background(if (selected) DeliColors.Primary.copy(alpha = 0.15f) else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            // The kit's own air, so a roomy kit is roomy in the drawer too.
+            .padding(horizontal = 12.dp, vertical = DeliColors.palette.spacing * 0.8f),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             icon()

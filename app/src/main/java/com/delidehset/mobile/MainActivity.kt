@@ -11,7 +11,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -46,6 +48,9 @@ import com.delidehset.mobile.ui.screens.RandomScreen
 import com.delidehset.mobile.ui.screens.SearchScreen
 import com.delidehset.mobile.ui.screens.SettingsScreen
 import com.delidehset.mobile.ui.screens.SubmitScreen
+import com.delidehset.mobile.ui.screens.HosetSettingsScreen
+import com.delidehset.mobile.ui.screens.NotificationsScreen
+import com.delidehset.mobile.vm.NotificationsViewModel
 import com.delidehset.mobile.ui.screens.ThemeStoreScreen
 import com.delidehset.mobile.ui.screens.UsersScreen
 import com.delidehset.mobile.ui.screens.WebFrameScreen
@@ -68,6 +73,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent { DeliTheme { DeliRoot() } }
     }
+
+    companion object {
+        /** What a system notification asks the app to open, if anything. */
+        const val EXTRA_OPEN = "hoset.open"
+        const val OPEN_NOTIFICATIONS = "notifications"
+    }
 }
 
 @Composable
@@ -81,6 +92,14 @@ private fun DeliRoot() {
     val theme by appVm.theme.collectAsStateWithLifecycle()
     val appMessage by appVm.message.collectAsStateWithLifecycle()
 
+    // The bell in the top bar reads the site's own count, refreshed whenever the app comes
+    // up and after the notifications screen has marked them read.
+    val notificationsVm = deliViewModel("notifications") { NotificationsViewModel(it.repository) }
+    var unreadNotifications by remember { mutableStateOf(0) }
+    LaunchedEffect(viewer.isSignedIn) {
+        if (viewer.isSignedIn) notificationsVm.unread { unreadNotifications = it } else unreadNotifications = 0
+    }
+
     // The app updates itself from its own GitHub releases; nothing here goes through a
     // store, so this is the only way a fix reaches an install that is already out there.
     val appContext = LocalContext.current.applicationContext
@@ -91,6 +110,15 @@ private fun DeliRoot() {
 
     val snackbar = remember { SnackbarHostState() }
     val nav = rememberNavController()
+
+    // A tapped system notification asks for the notifications screen; the rest of the
+    // launch is an ordinary cold start.
+    val activityContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        val requested = (activityContext as? android.app.Activity)?.intent
+            ?.getStringExtra(MainActivity.EXTRA_OPEN)
+        if (requested == MainActivity.OPEN_NOTIFICATIONS) nav.navigate(Routes.NOTIFICATIONS)
+    }
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route ?: Routes.FEED
     // The route *pattern* is the same for every "page" destination, so the sidebar needs
@@ -109,6 +137,8 @@ private fun DeliRoot() {
         currentRoute.startsWith("account") ||
         currentRoute.startsWith("settings") ||
         currentRoute.startsWith("themes") ||
+        currentRoute.startsWith("hoset") ||
+        currentRoute.startsWith("notifications") ||
         currentRoute.startsWith("contact")
 
     DeliScaffold(
@@ -134,6 +164,10 @@ private fun DeliRoot() {
                 popUpTo(Routes.FEED) { inclusive = false }
             }
         },
+        unreadNotifications = unreadNotifications,
+        onOpenNotifications = if (viewer.isSignedIn) {
+            { nav.navigate(Routes.NOTIFICATIONS) }
+        } else null,
         snackbarHostState = snackbar,
         drawerFooter = {
             UpdateRow(
@@ -341,6 +375,9 @@ private fun DeliRoot() {
                     isSelf = name.isNotBlank() && name.equals(viewer.username, ignoreCase = true),
                     contentPadding = noPad,
                     onEditProfile = { nav.navigate(Routes.account("personal")) },
+                    // Follower lists and the profile's other tabs are pages the site
+                    // renders better than a native screen could; they open in the frame.
+                    onOpenPath = { path, title -> nav.navigate(Routes.web(path, title)) },
                     onMessage = { appVm.showMessage(it) },
                 )
             }
@@ -415,6 +452,15 @@ private fun DeliRoot() {
                 )
             }
 
+            composable(Routes.NOTIFICATIONS) {
+                NotificationsScreen(
+                    vm = notificationsVm,
+                    contentPadding = noPad,
+                    onOpenPost = { href -> nav.navigate(Routes.web(href, "Gönderi")) },
+                    onChanged = { notificationsVm.unread { unreadNotifications = it } },
+                )
+            }
+
             composable(Routes.CONTACT) {
                 ContactScreen(
                     contentPadding = noPad,
@@ -430,8 +476,10 @@ private fun DeliRoot() {
                     theme = theme,
                     onThemeChange = { appVm.setTheme(it) },
                     onOpenThemeStore = { nav.navigate(Routes.THEMES) },
+                    onOpenHosetSettings = { nav.navigate(Routes.HOSET_SETTINGS) },
                     onLogout = {
                         appVm.logout()
+                        com.delidehset.mobile.notify.HosetNotifications.clear(activityContext)
                         clearWebSession()
                         nav.navigate(Routes.FEED) { popUpTo(Routes.FEED) { inclusive = false } }
                     },
@@ -444,6 +492,16 @@ private fun DeliRoot() {
                     current = theme,
                     onApply = { appVm.setTheme(it) },
                     contentPadding = noPad,
+                )
+            }
+
+            composable(Routes.HOSET_SETTINGS) {
+                HosetSettingsScreen(
+                    theme = theme,
+                    updateState = updateState,
+                    contentPadding = noPad,
+                    onOpenThemeStore = { nav.navigate(Routes.THEMES) },
+                    onCheckUpdates = { updateVm.checkNow() },
                 )
             }
         }
@@ -499,6 +557,8 @@ private fun titleFor(route: String, args: Bundle?): String = when {
     route.startsWith("login") -> "Oturum aç"
     route.startsWith("settings") -> "Ayarlar"
     route.startsWith("themes") -> "Tema Mağazası"
+    route.startsWith(Routes.HOSET_SETTINGS) -> "Hoset Ayarları"
+    route.startsWith(Routes.NOTIFICATIONS) -> "Bildirimler"
     route.startsWith("account") -> "Ayarlar"
     route.startsWith("contact") -> "Bize ulaşın"
     route.startsWith("random") -> "Rastgele"

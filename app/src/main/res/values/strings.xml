@@ -6,4 +6,9 @@
         you sign in with, the server that is slow, …).
     -->
     <string name="app_name">Hoset</string>
+
+    <!-- The channel Android shows in its own settings screen. -->
+    <string name="notification_channel">Bildirimler</string>
+    <string name="notification_channel_description">delidehset.com\'daki yeni yorum, bahsetme ve yanıtlar</string>
+    <string name="notification_summary_title">%1$d okunmamış bildirim</string>
 </resources>

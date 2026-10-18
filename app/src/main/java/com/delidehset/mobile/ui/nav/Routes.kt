@@ -36,10 +36,19 @@ object Routes {
 
     /** Where the app's kits are shown, each one previewed as itself. */
     const val THEMES = "themes"
+
+    /**
+     * Hoset's own settings — look, updates, licence — as opposed to the account settings
+     * the site owns. Kept beside [SETTINGS] because that is where it is reached from.
+     */
+    const val HOSET_SETTINGS = "hoset-settings"
     const val ACCOUNT = "account"
     const val RANDOM = "random"
     const val CONTACT = "contact"
     const val WEB = "web"
+
+    /** The site's own notification list, drawn natively. */
+    const val NOTIFICATIONS = "notifications"
 
     fun feed(hole: String? = null) = if (hole.isNullOrBlank()) FEED else "$FEED?hole=$hole"
 
