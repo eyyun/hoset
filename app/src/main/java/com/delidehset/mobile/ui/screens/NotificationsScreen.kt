@@ -35,6 +35,7 @@ import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.ErrorBox
 import com.delidehset.mobile.ui.components.LoadingBox
+import com.delidehset.mobile.ui.components.rememberManualRefresh
 import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tf
 import com.delidehset.mobile.ui.theme.DeliColors
@@ -64,6 +65,9 @@ fun NotificationsScreen(
     // A notification list is only worth showing current: every visit asks again.
     LaunchedEffect(Unit) { vm.load(force = true) }
 
+    // The visit's own load stays quiet; only a pull shows the spinner.
+    val pull = rememberManualRefresh(state.loading)
+
     when {
         state.loading && state.page.items.isEmpty() -> LoadingBox(Modifier.fillMaxSize())
 
@@ -73,8 +77,11 @@ fun NotificationsScreen(
         // Pull to refresh, like the feed, the profile and the communities: the list is asked
         // again instead of trusting whatever the screen was opened with.
         else -> PullToRefreshBox(
-            isRefreshing = state.loading,
-            onRefresh = { vm.load(force = true) },
+            isRefreshing = pull.active && state.loading,
+            onRefresh = {
+                pull.start()
+                vm.load(force = true)
+            },
             modifier = Modifier.fillMaxSize().background(DeliColors.Background),
         ) {
         LazyColumn(

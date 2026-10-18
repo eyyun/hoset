@@ -77,6 +77,7 @@ import com.delidehset.mobile.data.Viewer
 import com.delidehset.mobile.ui.AppLang
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.DeliAvatar
+import com.delidehset.mobile.ui.components.rememberManualRefresh
 import com.delidehset.mobile.ui.components.DeliCard
 import com.delidehset.mobile.ui.components.DeliOutlinedButton
 import com.delidehset.mobile.ui.components.EmptyBox
@@ -220,6 +221,9 @@ fun UsersScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.load() }
 
+    // The pull, not the load: a table refreshing itself is not the person asking for it.
+    val pull = rememberManualRefresh(state.loading)
+
     when {
         state.loading -> LoadingBox(Modifier.fillMaxSize())
         state.error != null -> ErrorBox(state.error!!, Modifier.fillMaxSize(), onRetry = { vm.load(true) })
@@ -227,8 +231,11 @@ fun UsersScreen(
         // Pull to refresh, like the feed and the profile: the table is read again instead of
         // only once when the screen was first opened.
         else -> PullToRefreshBox(
-            isRefreshing = state.loading,
-            onRefresh = { vm.load(true) },
+            isRefreshing = pull.active && state.loading,
+            onRefresh = {
+                pull.start()
+                vm.load(true)
+            },
             modifier = Modifier.fillMaxSize().background(DeliColors.Background),
         ) {
         LazyColumn(

@@ -650,7 +650,21 @@ class HolesViewModel(private val repo: DeliRepository) : ViewModel() {
         _state.value = _state.value.copy(loading = true, error = null)
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repo.holes(force) }
-                .onSuccess { _state.value = ListUiState(items = it, loading = false) }
+                .onSuccess { holes ->
+                    _state.value = ListUiState(items = holes, loading = false)
+                    // The site's Posts column reads 0 for every community, so the list would
+                    // say "0 gönderi" beside a community full of posts. The feeds are asked
+                    // instead, and each row is corrected as its own number arrives.
+                    val names = holes.map { it.name }
+                    val counted = runCatching { repo.holePostCounts(names) }.getOrNull().orEmpty()
+                    if (counted.isNotEmpty()) {
+                        _state.value = _state.value.copy(
+                            items = _state.value.items.map { hole ->
+                                counted[hole.name]?.let { hole.copy(postCount = it) } ?: hole
+                            }
+                        )
+                    }
+                }
                 .onFailure { _state.value = ListUiState(loading = false, error = DeliErrors.explain(it)) }
         }
     }

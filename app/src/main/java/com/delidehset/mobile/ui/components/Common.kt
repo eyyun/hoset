@@ -1,7 +1,7 @@
 package com.delidehset.mobile.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -55,6 +54,7 @@ import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
 import com.delidehset.mobile.data.AvatarStore
 import com.delidehset.mobile.data.DeliHttp
+import com.delidehset.mobile.ui.theme.CardStyle
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.avatarShape
 import com.delidehset.mobile.ui.theme.cardShape
@@ -406,18 +406,21 @@ private fun VoteArrow(
     onClick: () -> Unit,
 ) {
     val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
-    // A short spring on the arrow that was just picked: the circle appears at once, and the
-    // arrow lands in it instead of the two simply swapping colour.
-    val scale by animateFloatAsState(
-        targetValue = if (active) 1f else 0.86f,
-        animationSpec = spring(dampingRatio = 0.42f, stiffness = 900f),
-        label = "vote-arrow",
+    // A disc behind the arrow is not this app's shape: the vote is told by the arrow alone.
+    // The one kit that draws flat panels ("düz") is the exception — there a circle arrives
+    // with the vote, drawn plainly rather than with a spring, so the touch still reads as
+    // an answer. The arrow itself never moves: it only turns the vote's colour.
+    val circled = DeliColors.palette.cardStyle == CardStyle.FLAT
+    val disc by animateFloatAsState(
+        targetValue = if (active && circled) 1f else 0f,
+        animationSpec = tween(durationMillis = 140),
+        label = "vote-disc",
     )
     Box(
         modifier = Modifier
-            .size(size + 10.dp)
+            .size(size + 8.dp)
             .clip(CircleShape)
-            .background(if (active) accent.copy(alpha = 0.22f) else Color.Transparent)
+            .background(accent.copy(alpha = 0.22f * disc))
             .then(if (canVote) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -429,14 +432,39 @@ private fun VoteArrow(
                 canVote -> DeliColors.OnSurfaceVariant
                 else -> DeliColors.Border
             },
-            modifier = Modifier
-                .size(size)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                },
+            // The vote in force is drawn a touch larger, which is how a flat icon reads as
+            // slightly heavier without a second icon or a stroke of its own.
+            modifier = Modifier.size(if (active) size * 1.15f else size),
         )
     }
+}
+
+/**
+ * The pull the person made, as opposed to the load a screen starts by itself.
+ *
+ * `PullToRefreshBox` draws its spinner whenever `isRefreshing` is true, so keying that on
+ * "this screen is loading" meant the indicator dropped down every time a page was opened,
+ * a tab was switched or a cached list refreshed itself — noise for something nobody asked
+ * for. Only a real pull arms it; the next time the screen settles, it disarms itself.
+ */
+class ManualRefresh internal constructor() {
+    internal var armed by androidx.compose.runtime.mutableStateOf(false)
+
+    val active: Boolean get() = armed
+
+    fun start() {
+        armed = true
+    }
+}
+
+/** Arms a [ManualRefresh] and clears it as soon as the screen has finished loading. */
+@Composable
+fun rememberManualRefresh(loading: Boolean): ManualRefresh {
+    val pull = remember { ManualRefresh() }
+    LaunchedEffect(loading, pull) {
+        if (!loading) pull.armed = false
+    }
+    return pull
 }
 
 /**

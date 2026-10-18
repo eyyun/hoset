@@ -4,6 +4,7 @@ import com.delidehset.mobile.ui.tr
 import com.delidehset.mobile.ui.trf
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -47,6 +48,12 @@ class DeliRepository(
 
         /** How many post pages to warm after a feed load. */
         const val PREFETCH_COUNT = 2
+
+        /**
+         * How many feed pages a community is counted over before its number is given up on.
+         * A page holds a few dozen posts, so this is far more than any community here has.
+         */
+        const val HOLE_COUNT_PAGES = 8
 
         /**
          * Sidebar destinations warmed in the background, in the site's own order. Kept
@@ -689,6 +696,41 @@ class DeliRepository(
         HtmlParser.parseHoleHeader(page("/h/$name", force))
 
     /**
+     * How many posts a community really holds.
+     *
+     * The site's own community table prints `0` in its Posts column for every row — the
+     * same `0` it prints for a community that is full of posts — so reading that column
+     * told the app nothing, and every community looked empty. The feed API is the honest
+     * source: it hands out a `next_cursor` only while another page follows, so a community
+     * is counted until the pages run out. The counting stops at a ceiling rather than
+     * walking a very large community for ever, and a community that is closed to this
+     * viewer (403) simply has no count to give.
+     */
+    suspend fun holePostCount(name: String): Int? {
+        if (name.isBlank()) return null
+        var cursor: String? = null
+        var total = 0
+        repeat(HOLE_COUNT_PAGES) {
+            val page = runCatching {
+                feed(FeedSort.NEW, hole = name, cursor = cursor)
+            }.getOrNull() ?: return null
+            total += page.posts.size
+            cursor = page.nextCursor?.takeIf { it.isNotBlank() }
+            if (cursor == null || page.posts.isEmpty()) return total
+        }
+        return total
+    }
+
+    /** The same, for the whole community list, all at once. */
+    suspend fun holePostCounts(names: List<String>): Map<String, Int> = coroutineScope {
+        names.distinct()
+            .map { name -> async { name to holePostCount(name) } }
+            .awaitAll()
+            .mapNotNull { (name, count) -> count?.let { name to it } }
+            .toMap()
+    }
+
+    /**
      * A user's picture, from the endpoint the site's own hovercards call.
      *
      * The feed's JSON carries `author_avatar`, but a comment row and a row in the user
@@ -742,9 +784,27 @@ class DeliRepository(
             runCatching { HtmlParser.parseRelationTotal(page("/@$name/following", force)) }.getOrNull()
         }
         val parsed = profile.await()
+        val honestFollowers = followers.await() ?: parsed.followers
+        val honestFollowing = following.await() ?: parsed.following
         parsed.copy(
-            followers = followers.await() ?: parsed.followers,
-            following = following.await() ?: parsed.following,
+            followers = honestFollowers,
+            following = honestFollowing,
+            // The `stats` rows are read off the same header as the counters, so they carry
+            // the site's own wrong numbers — the header says "follows 0 users" while the
+            // list behind it is a page long. They are rewritten to the numbers above, or a
+            // screen drawing the stats would print the wrong count next to the right one.
+            stats = parsed.stats.map { stat ->
+                // The two rows the app itself writes, in whatever language is in force, plus
+                // the English keys the site's own stats use when they are read instead.
+                val key = stat.key.lowercase()
+                when {
+                    (stat.key == tr("Takipçi") || key.startsWith("follower")) && honestFollowers != null ->
+                        stat.copy(value = honestFollowers.toString())
+                    (stat.key == tr("Takip") || key.startsWith("following")) && honestFollowing != null ->
+                        stat.copy(value = honestFollowing.toString())
+                    else -> stat
+                }
+            },
         )
     }
 

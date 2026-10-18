@@ -39,6 +39,7 @@ import com.delidehset.mobile.ui.components.DeliCard
 import com.delidehset.mobile.ui.components.EmptyBox
 import com.delidehset.mobile.ui.components.ErrorBox
 import com.delidehset.mobile.ui.components.LoadingBox
+import com.delidehset.mobile.ui.components.rememberManualRefresh
 import com.delidehset.mobile.ui.components.MutedText
 import com.delidehset.mobile.ui.theme.DeliColors
 import com.delidehset.mobile.ui.theme.nameColor
@@ -54,6 +55,9 @@ fun HolesScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.load() }
 
+    // The spinner belongs to the person's own pull, not to the load this screen starts.
+    val pull = rememberManualRefresh(state.loading)
+
     Column(modifier = Modifier.fillMaxSize().background(DeliColors.Background)) {
         when {
             state.loading -> LoadingBox(Modifier.fillMaxSize())
@@ -62,8 +66,11 @@ fun HolesScreen(
             // Pull to refresh, like the feed: the community list and its counts are read
             // again from the site instead of only the first time the screen was opened.
             else -> PullToRefreshBox(
-                isRefreshing = state.loading,
-                onRefresh = { vm.load(true) },
+                isRefreshing = pull.active && state.loading,
+                onRefresh = {
+                    pull.start()
+                    vm.load(true)
+                },
                 modifier = Modifier.fillMaxSize(),
             ) {
             LazyColumn(

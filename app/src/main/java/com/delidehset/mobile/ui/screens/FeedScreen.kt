@@ -57,6 +57,7 @@ import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.components.EmptyBox
 import com.delidehset.mobile.ui.components.ErrorBox
 import com.delidehset.mobile.ui.components.LoadingBox
+import com.delidehset.mobile.ui.components.rememberManualRefresh
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.PostCard
 import com.delidehset.mobile.ui.theme.DeliColors
@@ -89,6 +90,7 @@ fun FeedScreen(
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val reduceMotion = remember { com.delidehset.mobile.data.HosetPrefs.reduceMotion(context) }
+    val pull = rememberManualRefresh(state.loading)
 
     // A private community: the lock screen is the whole feed, and the dialog is the only
     // way in.
@@ -240,8 +242,13 @@ fun FeedScreen(
         }
 
         PullToRefreshBox(
-            isRefreshing = state.loading && state.posts.isNotEmpty(),
-            onRefresh = { vm.refresh() },
+            // Only a pull the person made shows the spinner: opening the screen, changing
+            // the sort or returning with a cached list are all loads nobody asked to watch.
+            isRefreshing = pull.active && state.loading && state.posts.isNotEmpty(),
+            onRefresh = {
+                pull.start()
+                vm.refresh()
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
             when {

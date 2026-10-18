@@ -55,6 +55,7 @@ import coil.compose.AsyncImage
 import com.delidehset.mobile.data.DeliHttp
 import com.delidehset.mobile.ui.Text
 import com.delidehset.mobile.ui.components.DeliAvatar
+import com.delidehset.mobile.ui.components.rememberManualRefresh
 import com.delidehset.mobile.ui.components.DeliButtonPrimary
 import com.delidehset.mobile.ui.components.DeliCard
 import com.delidehset.mobile.ui.components.DeliOutlinedButton
@@ -147,6 +148,9 @@ fun ProfileScreen(
     val coinsLabel = t("Coin")
     val moderationLabel = t("Moderasyon geçmişi")
     val selfName = profile?.name ?: name
+    // A profile loading by itself — opening it, changing tab, coming back — must not drop
+    // the refresh indicator down: only the pull shows it.
+    val pull = rememberManualRefresh(loading || listLoading)
 
     when {
         loading && profile == null -> LoadingBox(Modifier.fillMaxSize())
@@ -160,8 +164,9 @@ fun ProfileScreen(
         // Pull to refresh, the way the feed already works: the profile and whichever tab is
         // open both ask the site again, so a count that moved on the site moves here too.
         else -> PullToRefreshBox(
-            isRefreshing = listLoading || loading,
+            isRefreshing = pull.active && (listLoading || loading),
             onRefresh = {
+                pull.start()
                 vm.load(name, force = true)
                 when (tab) {
                     "comments" -> vm.loadComments(name, force = true)

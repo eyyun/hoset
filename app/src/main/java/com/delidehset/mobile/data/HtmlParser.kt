@@ -526,7 +526,11 @@ object HtmlParser {
         }
         // Only the people who run the community are shown this link; a member — or
         // anybody else — must not be offered settings the site would refuse.
-        val canManage = doc.selectFirst("#main-content-col a[href^=/h/][href$=/settings]") != null
+        // `*=`, not `$=`: the site's own link to that page can carry a query string
+        // (`/h/x/settings?tab=general`), and requiring it to *end* with `/settings` meant the
+        // gear never appeared for the people the community actually lets in there.
+        val canManage = doc.selectFirst("#main-content-col a[href^=/h/][href*=/settings]") != null ||
+            doc.selectFirst("#main-content-col form[action*=/settings]") != null
         return HoleState(joined = joined, blocked = blocked, canManage = canManage)
     }
 
