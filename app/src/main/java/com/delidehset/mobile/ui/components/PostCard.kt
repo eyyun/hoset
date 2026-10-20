@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import com.delidehset.mobile.ui.Text
@@ -184,9 +185,9 @@ fun PostCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(8.dp)
-                            .size(30.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
-                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.65f))
                             .clickable {
                                 val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, image)
                                 android.widget.Toast.makeText(
@@ -197,7 +198,12 @@ fun PostCard(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("↓", color = androidx.compose.ui.graphics.Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Filled.Download,
+                            contentDescription = com.delidehset.mobile.ui.t("İndir"),
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                 }
             }
@@ -222,7 +228,7 @@ fun PostCard(
             ) {
                 Icon(
                     Icons.Filled.ChatBubbleOutline,
-                    contentDescription = "Yorumlar",
+                    contentDescription = com.delidehset.mobile.ui.t("Yorumlar"),
                     tint = DeliColors.OnSurfaceVariant,
                     modifier = Modifier.size(15.dp),
                 )
@@ -246,7 +252,7 @@ fun PostCard(
             }
             Icon(
                 Icons.Filled.Share,
-                contentDescription = "Paylaş",
+                contentDescription = com.delidehset.mobile.ui.t("Paylaş"),
                 tint = DeliColors.OnSurfaceVariant,
                 modifier = Modifier.size(16.dp).clickable { onShare() },
             )

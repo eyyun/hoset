@@ -183,7 +183,7 @@ class DeliRepository(
     }
 
     private fun decodeFeed(body: String): FeedResponse =
-        json.decodeFromString(FeedResponse.serializer(), body).also { resp ->
+        json.decodeFromString(FeedResponse.serializer(), ApiEnvelope.unwrapText(body)).also { resp ->
             for (post in resp.posts) {
                 AvatarStore.put(post.authorName, post.authorAvatar)
                 HoleStore.put(post.hole, logo = post.holeLogo, label = post.holeLabel)
@@ -555,6 +555,22 @@ class DeliRepository(
         return interpret(res, tr("Bildirimler"))
     }
 
+    /**
+     * Marks one notification read. The site's own links call `readNotification(id)`, which
+     * is a form POST of `commentId` to `/notifications/read`; opening the list alone never
+     * clears anything, so the app has to send this when a row is opened.
+     */
+    suspend fun markNotificationRead(commentId: String): ActionResult {
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/notifications/read",
+            listOf("commentId" to commentId),
+            referer = "/notifications",
+        )
+        cache.clear()
+        return interpret(res, tr("Bildirimler"))
+    }
+
     suspend fun contact(message: String): ActionResult {
         ensureAntiforgery()
         val res = http.postForm("/contact", listOf("message" to message), referer = "/contact")
@@ -798,7 +814,7 @@ class DeliRepository(
         val res = runCatching { http.get(url, accept = "application/json") }.getOrNull() ?: return null
         if (!res.isSuccess) return null
         val pic = runCatching {
-            json.parseToJsonElement(res.body).jsonObject["profile_pic"]?.jsonPrimitive?.contentOrNull
+            ApiEnvelope.payloadObject(res.body)?.get("profile_pic")?.jsonPrimitive?.contentOrNull
         }.getOrNull()
         return pic?.takeIf { it.isNotBlank() && !it.contains("default-profile-pic") }
     }
@@ -855,7 +871,7 @@ class DeliRepository(
         val apiInfo = async {
             runCatching {
                 val res = http.get("/api/profile/${encodeSegment(name)}")
-                if (res.isSuccess) org.json.JSONObject(res.body) else null
+                if (res.isSuccess) org.json.JSONObject(ApiEnvelope.unwrapText(res.body)) else null
             }.getOrNull()
         }
         val parsed = profile.await()
@@ -965,21 +981,36 @@ class DeliRepository(
 
     suspend fun searchPosts(query: String): List<SimpleRow> = search("posts", query)
 
-    suspend fun searchSuggest(query: String): List<String> {
+    suspend fun searchSuggestItems(query: String): List<SearchSuggestItem> {
         val url = "${DeliHttp.BASE_URL}/api/search/suggest?q=" + java.net.URLEncoder.encode(query, "UTF-8")
         return runCatching {
             val res = http.get(url, accept = "application/json")
-            val arr = json.parseToJsonElement(res.body)
+            val arr = ApiEnvelope.payload(res.body)
             if (arr is kotlinx.serialization.json.JsonArray) {
                 arr.mapNotNull { el ->
                     runCatching {
-                        val o = el.jsonObject
-                        (o["name"] ?: o["value"] ?: o["text"] ?: o["label"])?.jsonPrimitive?.content
+                        if (el is kotlinx.serialization.json.JsonObject) {
+                            val o = el.jsonObject
+                            val text = (o["text"] ?: o["name"] ?: o["value"] ?: o["label"])?.jsonPrimitive?.contentOrNullSafe()
+                            if (text.isNullOrBlank()) null
+                            else SearchSuggestItem(
+                                kind = o["kind"]?.jsonPrimitive?.contentOrNullSafe().orEmpty(),
+                                text = text,
+                                detail = o["detail"]?.jsonPrimitive?.contentOrNullSafe(),
+                                url = o["url"]?.jsonPrimitive?.contentOrNullSafe(),
+                            )
+                        } else {
+                            val text = (el as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNullSafe()
+                            if (text.isNullOrBlank()) null else SearchSuggestItem(text = text)
+                        }
                     }.getOrNull()
                 }
             } else emptyList()
         }.getOrDefault(emptyList())
     }
+
+    suspend fun searchSuggest(query: String): List<String> =
+        searchSuggestItems(query).map { it.text }
 
     suspend fun badges(force: Boolean = false): List<BadgeRow> =
         HtmlParser.parseBadges(page("/badges", force))
@@ -1117,22 +1148,29 @@ internal fun interpretAction(res: DeliResponse, what: String = tr("İşlem")): A
         }
 
         if (res.isJson) {
-            val parsed = runCatching {
-                actionJson.parseToJsonElement(res.body).jsonObject
-            }.getOrNull()
+            val root = ApiEnvelope.parse(res.body)
+            val enveloped = ApiEnvelope.isEnveloped(root)
+            val metaFailed = ApiEnvelope.status(root) == false
+            val parsed = (ApiEnvelope.payload(root) as? kotlinx.serialization.json.JsonObject)
+                ?: root as? kotlinx.serialization.json.JsonObject
             // The site answers its own JavaScript with `{error}` on failure and a
             // payload (e.g. `{cid}`) on success — and it does so with HTTP 200, so the
-            // status code alone cannot be trusted.
+            // status code alone cannot be trusted. The enveloped shape reports the
+            // outcome in `meta.status` / `meta.messages` instead.
             val error = parsed?.let { o ->
-                (o["error"] ?: o["detail"])?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-            }
+                runCatching {
+                    (o["error"] ?: o["detail"])?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+            } ?: if (metaFailed) (ApiEnvelope.humanize(ApiEnvelope.message(root)) ?: what) else null
             val message = parsed?.let { o ->
-                (o["message"] ?: o["error"] ?: o["detail"])?.jsonPrimitive?.content
-                    ?.takeIf { it.isNotBlank() }
-            }
+                runCatching {
+                    (o["message"] ?: o["error"] ?: o["detail"])?.jsonPrimitive?.content
+                        ?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+            } ?: if (metaFailed) ApiEnvelope.humanize(ApiEnvelope.message(root)) else null
             return ActionResult(
-                ok = res.isSuccess && error == null,
-                message = message ?: if (res.isSuccess) null else DeliErrors.explainHttp(res.code, what),
+                ok = res.isSuccess && error == null && !(enveloped && metaFailed),
+                message = message ?: if (res.isSuccess && !metaFailed) null else DeliErrors.explainHttp(res.code, what),
                 raw = res,
             )
         }

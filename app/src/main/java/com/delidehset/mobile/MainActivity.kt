@@ -151,6 +151,8 @@ private fun DeliRoot() {
 
     val snackbar = remember { SnackbarHostState() }
     val nav = rememberNavController()
+    val lastTabRoute = remember { mutableStateOf<String?>(null) }
+    val lastTabTapAt = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
 
     // A tapped system notification asks for the notifications screen; the rest of the
     // launch is an ordinary cold start.
@@ -200,6 +202,17 @@ private fun DeliRoot() {
         viewer = viewer,
         currentRoute = currentKey,
         onNavigate = { route ->
+            // Tapping the tab that is already open must leave it alone: the pop-and-push
+            // below would otherwise rebuild the very same screen (flash, lost scroll,
+            // a reload) on every tap. A single hole's feed is still the Home key, so
+            // that one is allowed through - Home from there means the main feed.
+            val sameScreen = route == currentKey && currentRoute != "feed/{hole}"
+            // Two quick taps land before the back stack has caught up with the first.
+            val now = android.os.SystemClock.uptimeMillis()
+            val repeated = route == lastTabRoute.value && now - lastTabTapAt.longValue < 400L
+            lastTabRoute.value = route
+            lastTabTapAt.longValue = now
+            if (sameScreen || repeated) return@DeliScaffold
             // Always build a fresh entry: reusing the top entry for the same route
             // pattern would keep the previous screen's arguments (e.g. tapping Sohbet
             // after Leaderboard would reopen Leaderboard). Popping back to the feed
@@ -250,21 +263,38 @@ private fun DeliRoot() {
             // Screens slide in the way the sheet under them suggests: forward pushes
             // come from the right, going back leaves to the right. Short durations and a
             // small travel keep a fast app feeling fast.
+            // Directional tab transitions: when moving across bottom tabs, slide in the natural
+            // direction (left-to-right when moving left, right-to-left when moving right).
             enterTransition = {
+                val initialOrder = tabOrder(initialState.destination.route, initialState.arguments)
+                val targetOrder = tabOrder(targetState.destination.route, targetState.arguments)
+                val movingLeft = initialOrder != null && targetOrder != null && targetOrder < initialOrder
                 androidx.compose.animation.slideInHorizontally(
                     animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 220),
-                    initialOffsetX = { it / 6 },
+                    initialOffsetX = { if (movingLeft) -it / 6 else it / 6 },
                 ) + androidx.compose.animation.fadeIn(
                     animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 180)
                 )
             },
             exitTransition = {
-                androidx.compose.animation.fadeOut(
+                val initialOrder = tabOrder(initialState.destination.route, initialState.arguments)
+                val targetOrder = tabOrder(targetState.destination.route, targetState.arguments)
+                val movingLeft = initialOrder != null && targetOrder != null && targetOrder < initialOrder
+                androidx.compose.animation.slideOutHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 200),
+                    targetOffsetX = { if (movingLeft) it / 8 else -it / 8 },
+                ) + androidx.compose.animation.fadeOut(
                     animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 140)
                 )
             },
             popEnterTransition = {
-                androidx.compose.animation.fadeIn(
+                val initialOrder = tabOrder(initialState.destination.route, initialState.arguments)
+                val targetOrder = tabOrder(targetState.destination.route, targetState.arguments)
+                val movingRight = initialOrder != null && targetOrder != null && targetOrder > initialOrder
+                androidx.compose.animation.slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 220),
+                    initialOffsetX = { if (movingRight) it / 6 else -it / 6 },
+                ) + androidx.compose.animation.fadeIn(
                     animationSpec = androidx.compose.animation.core.tween(if (reduceMotion) 0 else 180)
                 )
             },
@@ -415,6 +445,7 @@ private fun DeliRoot() {
                     contentPadding = noPad,
                     onOpenPost = { nav.navigate(Routes.post(it)) },
                     onOpenUser = { nav.navigate(Routes.user(it)) },
+                    onOpenHole = { nav.navigate("feed/$it") },
                 )
             }
 
@@ -738,6 +769,16 @@ private fun titleFor(route: String, args: Bundle?): String = when {
         else -> com.delidehset.mobile.data.HosetPrefs.appTitleState.value
     }
     else -> com.delidehset.mobile.data.HosetPrefs.appTitleState.value
+}
+
+private fun tabOrder(route: String?, args: Bundle?): Int? = when {
+    route == null -> null
+    route == Routes.FEED || route == Routes.FEED_EFFORT || route == "feed/{hole}" -> 0
+    route == Routes.HOLES -> 1
+    route == Routes.PAGE_PATTERN && args?.getString("kind") == "chat" -> 2
+    route == "page?kind=chat" -> 2
+    route.startsWith("user") || route.startsWith("account") || route == Routes.SETTINGS || route == Routes.LOGIN -> 3
+    else -> null
 }
 
 

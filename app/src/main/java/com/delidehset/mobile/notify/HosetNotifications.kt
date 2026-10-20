@@ -61,10 +61,10 @@ object HosetNotifications {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                context.getString(R.string.notification_channel),
+                com.delidehset.mobile.ui.tr("Bildirimler"),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = context.getString(R.string.notification_channel_description)
+                description = com.delidehset.mobile.ui.tr("delidehset.com'daki yeni yorum, bahsetme ve yanıtlar")
             }
         )
     }
@@ -109,7 +109,7 @@ object HosetNotifications {
 
         val summary = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(context.getString(R.string.notification_summary_title, page.unreadCount))
+            .setContentTitle(com.delidehset.mobile.ui.trf("{0} okunmamış bildirim", page.unreadCount))
             .setContentIntent(open)
             .setGroup(GROUP)
             .setGroupSummary(true)

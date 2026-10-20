@@ -62,11 +62,17 @@ object HtmlParser {
             profileLink != null
         if (!signedIn) return Viewer(isSignedIn = false, isAdmin = isAdmin(doc))
 
-        val avatar = profileLink?.selectFirst("img[src]")?.attr("src")
+        // The sidebar's account block links to the profile (`/@name`) and holds the picture
+        // and the name; the older markup reached the same block through the settings link.
+        val ownLink = sidebar.selectFirst("a[href^=/@]:has(img[src])")
+
+        val avatar = ownLink?.selectFirst("img[src]")?.attr("src")?.takeIf { it.isNotBlank() }
+            ?: profileLink?.selectFirst("img[src]")?.attr("src")
             ?: sidebar.selectFirst("img[src*=/avatar/]")?.attr("src")
             ?: sidebar.selectFirst("img[src*=/pp/]")?.attr("src")
 
-        val name = profileLink?.selectFirst("strong")?.text()?.trim()?.takeIf { it.isNotBlank() }
+        val name = ownLink?.selectFirst("strong")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?: profileLink?.selectFirst("strong")?.text()?.trim()?.takeIf { it.isNotBlank() }
             ?: extractSignedInName(doc)
 
         return Viewer(
@@ -623,6 +629,20 @@ object HtmlParser {
                 val text = comment.text().trim()
                 if (text.isBlank()) null
                 else SimpleRow(listOf(text), comment.selectFirst("a[href]")?.attr("href"))
+            }
+        }
+
+        // Holes / Communities tab: list-group of community cards
+        val holes = pane.select("a.list-group-item[href^=/h/]")
+        if (holes.isNotEmpty()) {
+            return holes.mapNotNull { link ->
+                val name = link.selectFirst("b")?.text()?.trim() ?: link.text().trim()
+                val desc = link.selectFirst(".text-muted, .text-small")?.text()?.trim().orEmpty()
+                if (name.isBlank()) null
+                else SimpleRow(
+                    cells = if (desc.isNotBlank()) listOf(name, desc) else listOf(name),
+                    href = link.attr("href"),
+                )
             }
         }
 
@@ -1255,5 +1275,5 @@ private fun JsonObject.bool(vararg keys: String): Boolean? =
 private fun JsonObject.obj(key: String): JsonObject? =
     runCatching { this[key]?.jsonObject }.getOrNull()
 
-private fun JsonPrimitive.contentOrNullSafe(): String? =
+internal fun JsonPrimitive.contentOrNullSafe(): String? =
     runCatching { if (this is JsonPrimitive && this.isString) content else content }.getOrNull()

@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material3.AlertDialog
@@ -281,7 +284,7 @@ fun PostScreen(
                         Spacer(Modifier.weight(1f))
                         Icon(
                             Icons.Filled.Flag,
-                            contentDescription = "Şikâyet",
+                            contentDescription = com.delidehset.mobile.ui.t("Şikâyet"),
                             tint = DeliColors.OnSurfaceVariant,
                             modifier = Modifier.size(18.dp).clickable { showReport = true },
                         )
@@ -289,7 +292,7 @@ fun PostScreen(
                             Spacer(Modifier.width(14.dp))
                             Icon(
                                 Icons.Filled.Delete,
-                                contentDescription = "Sil",
+                                contentDescription = com.delidehset.mobile.ui.t("Sil"),
                                 tint = DeliColors.Danger,
                                 modifier = Modifier.size(18.dp).clickable { showDelete = true },
                             )
@@ -419,35 +422,69 @@ fun PostScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
+                    .background(Color.Black.copy(alpha = 0.94f))
                     .clickable { zoomedImage = null },
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
                     model = imgUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     contentScale = ContentScale.Fit,
                 )
-                if (showDownload) {
+
+                // Top bar with close and download buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(24.dp)
-                            .clip(DeliShapes.control)
-                            .background(DeliColors.Primary)
-                            .clickable {
-                                val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
-                                onMessage(com.delidehset.mobile.ui.tr(if (ok) "İndirme başlatıldı." else "İndirilemedi."))
-                            }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .clickable { zoomedImage = null },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = com.delidehset.mobile.ui.t("İndir"),
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = com.delidehset.mobile.ui.t("Kapat"),
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
                         )
+                    }
+
+                    if (showDownload) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(DeliColors.Primary)
+                                .clickable {
+                                    val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
+                                    onMessage(com.delidehset.mobile.ui.tr(if (ok) "İndirme başlatıldı." else "İndirilemedi."))
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Download,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = com.delidehset.mobile.ui.t("İndir"),
+                                color = Color.White,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }

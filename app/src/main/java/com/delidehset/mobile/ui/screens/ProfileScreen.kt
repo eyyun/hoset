@@ -15,15 +15,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
@@ -275,7 +279,7 @@ fun ProfileScreen(
                                     Spacer(Modifier.width(7.dp))
                                     Icon(
                                         Icons.Filled.Verified,
-                                        contentDescription = "Operatör",
+                                        contentDescription = com.delidehset.mobile.ui.t("Operatör"),
                                         tint = DeliColors.Primary,
                                         modifier = Modifier.size(17.dp),
                                     )
@@ -630,35 +634,73 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
+                    .background(Color.Black.copy(alpha = 0.94f))
                     .clickable { zoomedImageUrl = null },
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
                     model = imgUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     contentScale = ContentScale.Fit,
                 )
-                if (mediaDownload) {
-                    Row(
+
+                // Top bar with close and download buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 36.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(DeliColors.Primary)
-                            .clickable {
-                                val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
-                                android.widget.Toast.makeText(
-                                    context,
-                                    if (ok) com.delidehset.mobile.ui.tr("Görsel indiriliyor…") else com.delidehset.mobile.ui.tr("İndirme başlatılamadı."),
-                                    android.widget.Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                            .padding(horizontal = 18.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .clickable { zoomedImageUrl = null },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(t("İndir"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = t("Kapat"),
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+
+                    if (mediaDownload) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(DeliColors.Primary)
+                                .clickable {
+                                    val ok = com.delidehset.mobile.data.HosetPrefs.downloadMedia(context, imgUrl)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        if (ok) com.delidehset.mobile.ui.tr("İndirme başlatıldı.") else com.delidehset.mobile.ui.tr("İndirilemedi."),
+                                        android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Download,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = t("İndir"),
+                                color = Color.White,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }

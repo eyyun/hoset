@@ -358,3 +358,10 @@ data class NotificationPage(
     /** The header bell's count; the site clamps it to "9+" once it gets big. */
     val unreadCount: Int = 0,
 )
+
+data class SearchSuggestItem(
+    val kind: String = "",
+    val text: String = "",
+    val detail: String? = null,
+    val url: String? = null,
+)

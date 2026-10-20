@@ -522,7 +522,7 @@ fun ChatScreen(
                     ) {
                         Icon(
                             Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "En yeni mesaja in",
+                            contentDescription = com.delidehset.mobile.ui.t("En yeni mesaja in"),
                             tint = Color.White,
                             modifier = Modifier.size(21.dp),
                         )
@@ -825,7 +825,7 @@ private fun RoomHeader(
             ) {
                 Icon(
                     Icons.Filled.CallEnd,
-                    contentDescription = "Sesten ayrıl",
+                    contentDescription = com.delidehset.mobile.ui.t("Sesten ayrıl"),
                     tint = DeliColors.Danger,
                     modifier = Modifier.size(19.dp),
                 )
@@ -898,7 +898,7 @@ private fun MicButton(
         Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
             Icon(
                 if (muted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                contentDescription = if (muted) "Mikrofonu aç" else "Mikrofonu kapat",
+                contentDescription = if (muted) com.delidehset.mobile.ui.t("Mikrofonu aç") else com.delidehset.mobile.ui.t("Mikrofonu kapat"),
                 tint = if (muted) DeliColors.Danger else DeliColors.Success,
                 modifier = Modifier.size(iconSize),
             )
@@ -1133,7 +1133,7 @@ private fun ChatRow(
     val copy: (CharSequence) -> Unit = { text ->
         val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
         clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("mesaj", text))
-        android.widget.Toast.makeText(context, "Mesaj kopyalandı", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(context, com.delidehset.mobile.ui.tr("Mesaj kopyalandı"), android.widget.Toast.LENGTH_SHORT).show()
     }
 
     // Both sides get a bubble: a line of text floating on the background reads as a
@@ -1325,7 +1325,7 @@ private fun Composer(
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,
-                contentDescription = "Gönder",
+                contentDescription = com.delidehset.mobile.ui.t("Gönder"),
                 tint = if (canSend) androidx.compose.ui.graphics.Color.White else DeliColors.OnSurfaceVariant,
                 modifier = Modifier.size(19.dp),
             )

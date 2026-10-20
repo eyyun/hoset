@@ -12,6 +12,13 @@ object WhatsNew {
 
     /** Newest first; the keys are `BuildConfig.VERSION_NAME` shapes. */
     private val byVersion: Map<String, List<String>> = mapOf(
+        "1.3.9" to listOf(
+            "Görsel indirme butonu yenilendi ve simgeli hale getirildi.",
+            "Site API değişikliklerine uyumluluk sağlandı.",
+            "Alt bar sekme animasyonları ve gezinme akıcılaştırıldı.",
+            "Arama ekranına topluluklar sekmesi ve canlı öneriler eklendi.",
+            "Video oynatıcı kontrolleri geliştirildi.",
+        ),
         "1.3.8" to listOf(
             "Profilde aşağı çekince takılan yenileme animasyonu düzeldi.",
             "Sohbetteki çevrimiçi yazıları küçük ikonlu sayılara dönüştü.",

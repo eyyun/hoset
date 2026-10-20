@@ -3,6 +3,7 @@ package com.delidehset.mobile.notify
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
+import kotlinx.coroutines.flow.first
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
@@ -62,6 +63,8 @@ object NotificationPoller {
         val container = app.container
         if (!container.cookies.hasSessionCookie()) return@withContext Result.success(Unit)
         runCatching {
+            // A background poll runs without the UI, so the language the person picked has to be loaded here.
+            runCatching { container.lang.language.first() }.getOrNull()?.takeIf { it.isNotBlank() }?.let { com.delidehset.mobile.ui.CurrentLang.code = it }
             val page = container.repository.notifications(force = true)
             HosetNotifications.post(app, page)
         }

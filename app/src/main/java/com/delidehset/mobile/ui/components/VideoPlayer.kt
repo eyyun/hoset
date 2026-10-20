@@ -155,6 +155,15 @@ fun DeliVideoPlayer(
         return target
     }
 
+    var showControls by remember { mutableStateOf(!compact) }
+
+    LaunchedEffect(showControls, playing) {
+        if (showControls && playing) {
+            delay(3500)
+            showControls = false
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -176,19 +185,25 @@ fun DeliVideoPlayer(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // A tap anywhere on the picture plays or pauses; the dim layer keeps the controls
-        // legible over a bright frame.
+        // Overlay: tap anywhere to show/hide controls or play/pause
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.55f))
-                    )
+                .then(
+                    if (showControls || !playing) {
+                        Modifier.background(
+                            Brush.verticalGradient(
+                                listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent, Color.Black.copy(alpha = 0.65f))
+                            )
+                        )
+                    } else Modifier
                 )
                 .pointerInput(player) {
                     detectTapGestures(
-                        onTap = { toggle() },
+                        onTap = {
+                            if (!compact) showControls = !showControls
+                            else toggle()
+                        },
                         onDoubleTap = { offset ->
                             skipByTouch(forward = offset.x > size.width / 2f)
                         },
@@ -196,15 +211,14 @@ fun DeliVideoPlayer(
                 },
         )
 
-        // Where the double tap landed, in the words of the gesture: which half was tapped is
-        // obvious to the finger and invisible to the picture, so it is said out loud.
+        // Skip hint (+5 sn / -5 sn)
         if (skipHint != 0) {
             Box(
                 modifier = Modifier
                     .align(if (skipHint > 0) Alignment.CenterEnd else Alignment.CenterStart)
                     .padding(horizontal = 14.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -218,29 +232,34 @@ fun DeliVideoPlayer(
 
         if (buffering && !playing) {
             Box(Modifier.align(Alignment.Center)) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(32.dp))
             }
-        } else if (!playing) {
+        } else if (!playing || (showControls && !compact)) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(58.dp)
+                    .size(54.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f))
                     .clickable { toggle() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "Oynat", tint = Color.White, modifier = Modifier.size(34.dp))
+                Icon(
+                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = com.delidehset.mobile.ui.t(if (playing) "Kapat" else "Oynat"),
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp),
+                )
             }
         }
 
-        if (!fullscreen) {
-            Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp)) {
+        if (!fullscreen && (showControls || !playing)) {
+            Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (!compact) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(18.dp)
+                            .height(20.dp)
                             .pointerInput(player, duration) {
                                 detectTapGestures { offset ->
                                     if (duration > 0) seekTo(offset.x / size.width.toFloat())
@@ -251,7 +270,7 @@ fun DeliVideoPlayer(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .height(3.dp)
+                                .height(4.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.35f))
                         )
@@ -259,7 +278,7 @@ fun DeliVideoPlayer(
                         Box(
                             Modifier
                                 .fillMaxWidth(progress.coerceIn(0f, 1f))
-                                .height(3.dp)
+                                .height(4.dp)
                                 .clip(CircleShape)
                                 .background(DeliColors.Primary)
                         )
@@ -273,21 +292,21 @@ fun DeliVideoPlayer(
                         Spacer(Modifier.weight(1f))
                         Icon(
                             imageVector = if (muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                            contentDescription = if (muted) "Sesi aç" else "Sessize al",
+                            contentDescription = if (muted) com.delidehset.mobile.ui.t("Sesi aç") else com.delidehset.mobile.ui.t("Sessize al"),
                             tint = Color.White,
                             modifier = Modifier
-                                .size(19.dp)
+                                .size(20.dp)
                                 .clickable {
                                     muted = !muted
                                     player.volume = if (muted) 0f else 1f
                                 },
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(16.dp))
                         Icon(
                             Icons.Filled.Fullscreen,
-                            contentDescription = "Tam ekran",
+                            contentDescription = com.delidehset.mobile.ui.t("Tam ekran"),
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp).clickable { fullscreen = true },
+                            modifier = Modifier.size(22.dp).clickable { fullscreen = true },
                         )
                     } else {
                         Spacer(Modifier.weight(1f))
@@ -305,12 +324,17 @@ fun DeliVideoPlayer(
 
     if (fullscreen) {
         Dialog(
-            onDismissRequest = {
-                fullscreen = false
-                player.pause()
-            },
+            onDismissRequest = { fullscreen = false },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
+            var fullShowControls by remember { mutableStateOf(true) }
+            LaunchedEffect(fullShowControls, playing) {
+                if (fullShowControls && playing) {
+                    delay(3500)
+                    fullShowControls = false
+                }
+            }
+
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 AndroidView(
                     factory = { ctx ->
@@ -327,43 +351,131 @@ fun DeliVideoPlayer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(
+                            if (fullShowControls || !playing) {
+                                Modifier.background(
+                                    Brush.verticalGradient(
+                                        listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                                    )
+                                )
+                            } else Modifier
+                        )
                         .pointerInput(player) {
                             detectTapGestures(
-                                onTap = { toggle() },
+                                onTap = { fullShowControls = !fullShowControls },
                                 onDoubleTap = { offset -> skipByTouch(forward = offset.x > size.width / 2f) },
                             )
                         },
                 )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Filled.FullscreenExit,
-                        contentDescription = "Küçült",
-                        tint = Color.White,
+
+                // Skip hint in fullscreen
+                if (skipHint != 0) {
+                    Box(
                         modifier = Modifier
-                            .size(26.dp)
-                            .clickable {
-                                fullscreen = false
-                                player.pause()
-                            },
-                    )
+                            .align(if (skipHint > 0) Alignment.CenterEnd else Alignment.CenterStart)
+                            .padding(horizontal = 24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (skipHint > 0) "5 sn  \u00bb" else "\u00ab  5 sn",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                        )
+                    }
                 }
-                if (!playing) {
+
+                if (fullShowControls) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.FullscreenExit,
+                            contentDescription = com.delidehset.mobile.ui.t("Küçült"),
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clickable { fullscreen = false },
+                        )
+                    }
+                }
+
+                if (!playing || fullShowControls) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(64.dp)
+                            .size(68.dp)
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                            .background(Color.Black.copy(alpha = 0.55f))
                             .clickable { toggle() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Oynat", tint = Color.White, modifier = Modifier.size(38.dp))
+                        Icon(
+                            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = com.delidehset.mobile.ui.t(if (playing) "Kapat" else "Oynat"),
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                }
+
+                if (fullShowControls) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .pointerInput(player, duration) {
+                                    detectTapGestures { offset ->
+                                        if (duration > 0) seekTo(offset.x / size.width.toFloat())
+                                    }
+                                },
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.35f))
+                            )
+                            val progress = if (duration > 0) position.toFloat() / duration else 0f
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                    .height(4.dp)
+                                    .clip(CircleShape)
+                                    .background(DeliColors.Primary)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(timeLabel(position), color = Color.White, fontSize = 12.sp)
+                            Text(" / ", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                            Text(timeLabel(duration), color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                            Spacer(Modifier.weight(1f))
+                            Icon(
+                                imageVector = if (muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                contentDescription = if (muted) com.delidehset.mobile.ui.t("Sesi aç") else com.delidehset.mobile.ui.t("Sessize al"),
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable {
+                                        muted = !muted
+                                        player.volume = if (muted) 0f else 1f
+                                    },
+                            )
+                        }
                     }
                 }
             }
@@ -437,7 +549,7 @@ fun VideoThumb(url: String?, videoUrl: String? = null, modifier: Modifier = Modi
         ) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
-                contentDescription = "Videoyu oynat",
+                contentDescription = com.delidehset.mobile.ui.t("Videoyu oynat"),
                 tint = Color.White,
                 modifier = Modifier.size(28.dp),
             )

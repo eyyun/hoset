@@ -6,6 +6,7 @@ import com.delidehset.mobile.data.ActionResult
 import com.delidehset.mobile.data.BadgeRow
 import com.delidehset.mobile.data.CommentNode
 import com.delidehset.mobile.data.DeliErrors
+import com.delidehset.mobile.data.DeliNotification
 import com.delidehset.mobile.data.DeliRepository
 import com.delidehset.mobile.data.DiscoveredForm
 import com.delidehset.mobile.data.FeedPost
@@ -640,7 +641,7 @@ internal fun CommentNode.sameCommentAs(local: CommentNode): Boolean {
 /** The id the site hands back for a freshly created comment, out of `{"cid":"…"}`. */
 private fun ActionResult.commentId(): String? = runCatching {
     val body = raw?.body ?: return null
-    val root = kotlinx.serialization.json.Json.parseToJsonElement(body)
+    val root = com.delidehset.mobile.data.ApiEnvelope.payload(body)
     (root as? kotlinx.serialization.json.JsonObject)
         ?.get("cid")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
         ?.takeIf { it.isNotBlank() }
@@ -1102,6 +1103,21 @@ class NotificationsViewModel(private val repo: DeliRepository) : ViewModel() {
         }
     }
 
+    /** Opening a row marks it read on the site, as clicking it does in the browser. */
+    fun markRead(row: DeliNotification) {
+        if (!row.unread) return
+        val commentId = row.href?.substringAfter("/comment/", "")?.substringBefore("/")
+            ?.substringBefore("?")?.substringBefore("#")?.takeIf { it.isNotBlank() } ?: return
+        _state.update { s ->
+            val page = s.page
+            s.copy(page = page.copy(
+                items = page.items.map { if (it.id == row.id) it.copy(unread = false) else it },
+                unreadCount = (page.unreadCount - 1).coerceAtLeast(0),
+            ))
+        }
+        viewModelScope.launch(Dispatchers.IO) { runCatching { repo.markNotificationRead(commentId) } }
+    }
+
     /** The number the bell shows; fetched without opening the screen. */
     fun unread(onCount: (Int) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -1139,10 +1155,10 @@ class RandomViewModel(private val repo: DeliRepository) : ViewModel() {
 
 data class SearchUiState(
     val query: String = "",
-    /** Which of the site's search tabs this is: `posts`, `comments` or `users`. */
+    /** Which of the site's search tabs this is: `posts`, `comments`, `users` or `holes`. */
     val kind: String = "posts",
     val results: List<SimpleRow> = emptyList(),
-    val suggestions: List<String> = emptyList(),
+    val suggestions: List<com.delidehset.mobile.data.SearchSuggestItem> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
     val searched: Boolean = false,
@@ -1154,14 +1170,18 @@ class SearchViewModel(private val repo: DeliRepository) : ViewModel() {
 
     fun onQueryChange(q: String) {
         _state.update { it.copy(query = q) }
-        if (q.length >= 2) {
+        if (q.trim().length >= 2) {
             viewModelScope.launch(Dispatchers.IO) {
-                val s = runCatching { repo.searchSuggest(q) }.getOrDefault(emptyList())
+                val s = runCatching { repo.searchSuggestItems(q.trim()) }.getOrDefault(emptyList())
                 _state.update { it.copy(suggestions = s) }
             }
         } else {
             _state.update { it.copy(suggestions = emptyList()) }
         }
+    }
+
+    fun clearQuery() {
+        _state.update { it.copy(query = "", suggestions = emptyList(), results = emptyList(), searched = false) }
     }
 
     /** Switching tab re-runs the same query against that tab, the way the site does. */
@@ -1175,7 +1195,7 @@ class SearchViewModel(private val repo: DeliRepository) : ViewModel() {
         if (query.isBlank()) return
         _state.update { it.copy(loading = true, error = null, query = query, suggestions = emptyList()) }
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { repo.search(_state.value.kind, query) }
+            runCatching { repo.search(_state.value.kind, query.trim()) }
                 .onSuccess { rows ->
                     _state.update { s -> s.copy(results = rows, loading = false, searched = true) }
                 }

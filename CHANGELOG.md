@@ -4,6 +4,14 @@ Her sürümün kurulum dosyası ve kısa özeti GitHub sürüm sayfasındadır. 
 güncellemeden sonra `WhatsNew` ekranında gösterilir. Bu dosya yalnızca neyin ne zaman
 değiştiğini tek yerde tutar.
 
+## 1.3.9
+
+- Görsel indirme butonu yenilendi: Tam ekran görsel görüntüleyicide ekranın tepesinde kapatma ve simgeli indirme butonu yer alıyor.
+- Sitenin yeni API yanıt yapısına tam uyumluluk getirildi.
+- Alt gezinme çubuğunda sekme geçiş animasyonları akıcılaştırıldı ve çift tıklama koruması eklendi.
+- Arama ekranına Topluluklar sekmesi, temizleme butonu ve canlı arama önerileri eklendi.
+- Video oynatıcı kontrolleri ve tam ekran yönetimi geliştirildi.
+
 ## 1.3.8
 
 - Profilde aşağı çekince takılan yenileme animasyonu düzeldi; yükleme bitince kendiliğinden kapanıyor.

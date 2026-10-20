@@ -31,10 +31,13 @@ class DeliHttp(private val cookies: DeliCookieJar) {
     companion object {
         const val BASE_URL = "https://delidehset.com"
 
-        /** The site is served through Cloudflare, so we present a normal mobile browser. */
-        private const val USER_AGENT =
+        /**
+         * The site is served through Cloudflare, so the browser-shaped prefix stays; the
+         * trailing `Hoset/<version>` token is what identifies this client to the site.
+         */
+        val USER_AGENT: String =
             "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/124.0.0.0 Mobile Safari/537.36"
+                "Chrome/124.0.0.0 Mobile Safari/537.36 Hoset/${com.delidehset.mobile.BuildConfig.VERSION_NAME}"
 
         /**
          * ASP.NET Core antiforgery: the page ships a hidden `__RequestVerificationToken`

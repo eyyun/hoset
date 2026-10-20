@@ -291,7 +291,7 @@ fun FeedScreen(
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, DeliHttp.BASE_URL + post.permalink)
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Paylaş"))
+                                context.startActivity(Intent.createChooser(intent, com.delidehset.mobile.ui.tr("Paylaş")))
                             },
                         )
                     }

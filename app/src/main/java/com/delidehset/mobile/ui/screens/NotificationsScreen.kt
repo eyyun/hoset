@@ -144,7 +144,10 @@ fun NotificationsScreen(
             }
 
             items(state.page.items, key = { it.id + it.hashCode().absoluteValue }) { row ->
-                NotificationRow(row) { row.postHref?.let(onOpenPost) }
+                NotificationRow(row) {
+                    vm.markRead(row)
+                    row.postHref?.let(onOpenPost)
+                }
             }
         }
         }

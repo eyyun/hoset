@@ -12,10 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +52,7 @@ private val SearchTabs = listOf(
     "posts" to "Gönderiler",
     "comments" to "Yorumlar",
     "users" to "Kullanıcılar",
+    "holes" to "Topluluklar",
 )
 
 @Composable
@@ -54,6 +61,7 @@ fun SearchScreen(
     contentPadding: PaddingValues,
     onOpenPost: (String) -> Unit,
     onOpenUser: (String) -> Unit = {},
+    onOpenHole: (String) -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
@@ -68,8 +76,19 @@ fun SearchScreen(
             singleLine = true,
             shape = DeliShapes.control,
             trailingIcon = {
-                IconButton(onClick = { vm.search() }) {
-                    Icon(Icons.Filled.Search, contentDescription = "Ara", tint = DeliColors.Primary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (state.query.isNotBlank()) {
+                        IconButton(onClick = { vm.clearQuery() }) {
+                            Icon(
+                                Icons.Filled.Clear,
+                                contentDescription = com.delidehset.mobile.ui.t("Kapat"),
+                                tint = DeliColors.OnSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(onClick = { vm.search() }) {
+                        Icon(Icons.Filled.Search, contentDescription = com.delidehset.mobile.ui.t("Ara"), tint = DeliColors.Primary)
+                    }
                 }
             },
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
@@ -85,9 +104,7 @@ fun SearchScreen(
             ),
         )
 
-        // The site's own three tabs. Without them a user search or a comment search was
-        // simply unreachable, and the tab strip itself was what the row reader had been
-        // mistaking for results.
+        // The site's own tabs.
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -111,17 +128,59 @@ fun SearchScreen(
         }
 
         if (state.suggestions.isNotEmpty()) {
-            LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .background(DeliColors.Surface, shape = DeliShapes.card)
+                    .padding(vertical = 4.dp),
+            ) {
                 items(state.suggestions) { s ->
-                    Text(
-                        text = s,
-                        color = DeliColors.OnSurfaceVariant,
-                        fontSize = 13.sp,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { vm.search(s) }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                    )
+                            .clickable {
+                                if (!s.url.isNullOrBlank()) {
+                                    val u = s.url
+                                    when {
+                                        u.startsWith("/@") -> onOpenUser(u.removePrefix("/@"))
+                                        u.startsWith("/h/") -> onOpenHole(u.removePrefix("/h/").substringBefore("/"))
+                                        else -> onOpenPost(u)
+                                    }
+                                } else {
+                                    vm.search(s.text)
+                                }
+                            }
+                            .padding(vertical = 9.dp, horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val icon = when (s.kind) {
+                            "user" -> Icons.Filled.Person
+                            "hole" -> Icons.Filled.Groups
+                            else -> Icons.Filled.Article
+                        }
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = DeliColors.Primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = s.text,
+                                color = DeliColors.OnBackground,
+                                fontSize = 14.sp,
+                            )
+                            if (!s.detail.isNullOrBlank()) {
+                                Text(
+                                    text = s.detail,
+                                    color = DeliColors.OnSurfaceVariant,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -145,9 +204,12 @@ fun SearchScreen(
                     DeliCard(
                         onClick = row.href?.let { href ->
                             {
-                                // User results link to /@name, everything else to a post.
-                                if (href.startsWith("/@")) onOpenUser(href.removePrefix("/@"))
-                                else onOpenPost(href)
+                                // User results link to /@name, hole results to /h/name, everything else to a post.
+                                when {
+                                    href.startsWith("/@") -> onOpenUser(href.removePrefix("/@"))
+                                    href.startsWith("/h/") -> onOpenHole(href.removePrefix("/h/").substringBefore("/"))
+                                    else -> onOpenPost(href)
+                                }
                             }
                         },
                     ) {

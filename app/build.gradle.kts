@@ -27,8 +27,8 @@ android {
         applicationId = "com.delidehset.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.3.8"
+        versionCode = 15
+        versionName = "1.3.9"
         resourceConfigurations += listOf("tr", "en")
     }
 
