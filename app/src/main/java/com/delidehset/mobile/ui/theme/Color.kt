@@ -338,7 +338,7 @@ object DeliPalettes {
             primaryContainer = Color(0xFF7F1D1D),
             blue = Color(0xFFA1A1AA),
             upvote = Color(0xFFF59E0B),
-            downvote = Color(0xFF71717A),
+            downvote = Color(0xFF38BDF8),
             success = Color(0xFF22C55E),
             warning = Color(0xFFEAB308),
             danger = Color(0xFFF87171),

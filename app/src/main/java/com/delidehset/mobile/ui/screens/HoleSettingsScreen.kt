@@ -153,7 +153,7 @@ fun HoleSettingsScreen(
                     )
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        HoleLogo(url = settings.logoUrl, name = hole)
+                        HoleLogo(url = settings.logoUrl, name = hole, autoFetch = true)
                         Spacer(Modifier.width(12.dp))
                         Box(
                             modifier = Modifier
@@ -279,18 +279,29 @@ private fun fieldColors() = TextFieldDefaults.colors(
 
 /** The community's own picture, or its initial when the site has none. */
 @Composable
-internal fun HoleLogo(url: String?, name: String, size: androidx.compose.ui.unit.Dp = 52.dp) {
+internal fun HoleLogo(
+    url: String?,
+    name: String,
+    size: androidx.compose.ui.unit.Dp = 52.dp,
+    autoFetch: Boolean = false,
+) {
     val context = LocalContext.current
     val given = url?.takeIf { !HoleStore.isGenericLogo(it) }
     var resolved by remember(name, given) {
         mutableStateOf(given ?: HoleStore.cachedLogo(name))
     }
-    LaunchedEffect(name, given) {
+    LaunchedEffect(name, given, autoFetch) {
         if (given != null) {
             HoleStore.put(name, logo = given)
             resolved = given
             return@LaunchedEffect
         }
+        val cached = HoleStore.cachedLogo(name)
+        if (cached != null) {
+            resolved = cached
+            return@LaunchedEffect
+        }
+        if (!autoFetch) return@LaunchedEffect
         val app = context.applicationContext as? com.delidehset.mobile.DeliApp ?: return@LaunchedEffect
         resolved = HoleStore.remember(app.container.repository, name)
     }

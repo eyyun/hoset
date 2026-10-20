@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -410,7 +411,7 @@ fun VoteArrows(
     }
 }
 
-/** One arrow of [VoteArrows]: solid colour and slightly thicker stroke when active, no circle background. */
+/** One arrow of [VoteArrows]: filled circle background and bolder icon when active, dimmed without a session. */
 @Composable
 private fun VoteArrow(
     up: Boolean,
@@ -420,6 +421,11 @@ private fun VoteArrow(
     onClick: () -> Unit,
 ) {
     val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
+    val scale by animateFloatAsState(
+        targetValue = if (active) 1.14f else 0.94f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.42f, stiffness = 900f),
+        label = "vote-arrow",
+    )
     val tint = when {
         active -> accent
         canVote -> DeliColors.OnSurfaceVariant
@@ -427,34 +433,24 @@ private fun VoteArrow(
     }
     Box(
         modifier = Modifier
-            .size(size + 6.dp)
+            .size(size + 8.dp)
+            .clip(CircleShape)
+            .background(if (active) accent.copy(alpha = 0.22f) else Color.Transparent)
+            .border(1.dp, if (active) accent.copy(alpha = 0.45f) else Color.Transparent, CircleShape)
             .then(if (canVote) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(size)) {
-            val w = this.size.width
-            val h = this.size.height
-            val dx = w * 0.24f
-            val dy = h * 0.14f
-            val cy = h * 0.50f
-            val topY = if (up) cy - dy else cy + dy
-            val sideY = if (up) cy + dy else cy - dy
-            val strokePx = (if (active) 2.75.dp else 1.85.dp).toPx()
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.5f - dx, sideY)
-                lineTo(w * 0.5f, topY)
-                lineTo(w * 0.5f + dx, sideY)
-            }
-            drawPath(
-                path = path,
-                color = tint,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = strokePx,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round,
-                ),
-            )
-        }
+        Icon(
+            imageVector = if (up) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (up) "Upvote" else "Downvote",
+            tint = tint,
+            modifier = Modifier
+                .size(if (active) size + 2.dp else size)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+        )
     }
 }
 

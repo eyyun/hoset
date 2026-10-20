@@ -76,7 +76,8 @@ class DeliHttp(private val cookies: DeliCookieJar) {
     suspend fun get(
         path: String,
         accept: String = "text/html,application/xhtml+xml,*/*",
-    ): DeliResponse = withContext(Dispatchers.IO) { execute(build("GET", path, accept).build()) }
+        referer: String? = null,
+    ): DeliResponse = withContext(Dispatchers.IO) { execute(build("GET", path, accept, referer).build()) }
 
     suspend fun postForm(
         path: String,

@@ -136,6 +136,7 @@ class ChatBridge(
         // drawing it at zero alpha removes that entirely. It stays attached and laid
         // out, so scripts, timers and audio all keep running.
         alpha = 0f
+        settings.userAgentString = DeliHttp.USER_AGENT
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
@@ -303,11 +304,28 @@ class ChatBridge(
      * Fetches the room frame and hands it back with the watcher appended, so the script
      * runs inside the sandbox with the room's own document in scope.
      */
-    private fun frameWithWatcher(query: String?): WebResourceResponse {
+    private fun frameWithWatcher(query: String?): WebResourceResponse? {
         val path = if (query.isNullOrBlank()) FRAME_PATH else "$FRAME_PATH?$query"
-        val body = runBlocking { http.get(path).body }
-        val patched = body.replace("</body>", "$WATCHER</body>")
-            .let { if (it == body) body + WATCHER else it }
+        val cookieManager = CookieManager.getInstance()
+        val cookieHeader = runCatching { cookieManager.getCookie(DeliHttp.BASE_URL) }.getOrNull()
+        val url = DeliHttp.BASE_URL.toHttpUrlOrNull()
+        if (url != null && !cookieHeader.isNullOrBlank()) {
+            cookies.importRawHeader(url, cookieHeader)
+        }
+        val res = runBlocking {
+            runCatching {
+                http.get(path = path, referer = DeliHttp.BASE_URL + ROOM_PATH)
+            }.getOrNull()
+        }
+        if (res == null || !res.isSuccess || res.body.isBlank() || !res.body.contains("</body>")) {
+            android.util.Log.w(
+                "DeliChat",
+                "frameWithWatcher: res failed code=${res?.code} len=${res?.body?.length ?: 0}, letting webview handle natively"
+            )
+            return null
+        }
+        val patched = res.body.replace("</body>", "$WATCHER</body>")
+            .let { if (it == res.body) res.body + WATCHER else it }
         return WebResourceResponse(
             "text/html",
             "utf-8",
@@ -412,6 +430,14 @@ class ChatBridge(
               var dropped = 0;
               var deafened = false;
 
+              function pLog(line) {
+                try {
+                  if (typeof window.DeliChat !== 'undefined' && window.DeliChat && typeof window.DeliChat.log === 'function') {
+                    window.DeliChat.log(line);
+                  }
+                } catch (e) {}
+              }
+
               function norm(s) {
                 return String(s || '').replace(/^@/, '').trim().toLowerCase();
               }
@@ -425,7 +451,7 @@ class ChatBridge(
                   primaryUid = n;
                 }
                 if (isNew) {
-                  try { DeliChat.log('parent-echo: learned own uid=' + n + ' via ' + source); } catch (e) {}
+                  pLog('parent-echo: learned own uid=' + n + ' via ' + source);
                 }
                 if (window.G729 && typeof window.G729.__deliSyncOwn === 'function') {
                   try { window.G729.__deliSyncOwn(primaryUid); } catch (e) {}
@@ -485,7 +511,7 @@ class ChatBridge(
                     return orig(out);
                   };
                   md.__deliParentMic = true;
-                  try { DeliChat.log('parent-echo: mic hardened'); } catch (e) {}
+                  pLog('parent-echo: mic hardened');
                 } catch (e) {}
               }
 
@@ -509,7 +535,7 @@ class ChatBridge(
                         addGuidUids(id, 'g729-str');
                       }
                       var target = primaryUid > 0 ? primaryUid : id;
-                      try { DeliChat.log('parent-echo: setOwnUserId(' + id + ') -> ' + target); } catch (e) {}
+                      pLog('parent-echo: setOwnUserId(' + id + ') -> ' + target);
                       return origSetOwn(target);
                     };
                   }
@@ -520,7 +546,7 @@ class ChatBridge(
                       if (deafened || (u > 0 && ownUids[u])) {
                         dropped++;
                         if (dropped === 1 || dropped % 50 === 0) {
-                          try { DeliChat.log('parent-echo: dropped ' + dropped + ' own/deafened voice frame(s) for uid=' + u); } catch (e) {}
+                          pLog('parent-echo: dropped ' + dropped + ' own/deafened voice frame(s) for uid=' + u);
                         }
                         return false;
                       }
@@ -537,9 +563,9 @@ class ChatBridge(
 
                   g.__deliParentHooked = true;
                   if (primaryUid > 0 && origSetOwn) origSetOwn(primaryUid);
-                  try { DeliChat.log('parent-echo: G729 hooked (primaryUid=' + primaryUid + ')'); } catch (e) {}
+                  pLog('parent-echo: G729 hooked (primaryUid=' + primaryUid + ')');
                 } catch (e) {
-                  try { DeliChat.log('parent-echo: G729 hook error ' + e); } catch (x) {}
+                  pLog('parent-echo: G729 hook error ' + e);
                 }
               }
 
@@ -583,6 +609,20 @@ class ChatBridge(
               window.addEventListener('message', function (ev) {
                 var d = ev && ev.data;
                 if (!d || typeof d !== 'object') return;
+                if (typeof d.__deliSnap === 'string') {
+                  try {
+                    if (window.DeliChat && typeof window.DeliChat.post === 'function') {
+                      window.DeliChat.post(d.__deliSnap);
+                    }
+                  } catch (e) {}
+                }
+                if (typeof d.__deliLog === 'string') {
+                  try {
+                    if (window.DeliChat && typeof window.DeliChat.log === 'function') {
+                      window.DeliChat.log(d.__deliLog);
+                    }
+                  } catch (e) {}
+                }
                 if (typeof d.__deliOwnUid === 'number' && d.__deliOwnUid > 0) {
                   addOwnUid(d.__deliOwnUid >>> 0, 'frame');
                 }
@@ -640,7 +680,7 @@ class ChatBridge(
     }
 
     /** The room calls these two methods: one snapshot, one diagnostic line. */
-    private inner class PageBridge {
+    inner class PageBridge {
         @JavascriptInterface
         fun post(json: String) {
             val parsed = runCatching { parse(json) }.getOrNull() ?: return
@@ -750,6 +790,16 @@ class ChatBridge(
         (function () {
           if (window.__deliRoom) return;
           window.__deliRoom = true;
+
+          function safeLog(line) {
+            try {
+              if (typeof window.DeliChat !== 'undefined' && window.DeliChat && typeof window.DeliChat.log === 'function') {
+                window.DeliChat.log(line);
+                return;
+              }
+            } catch (x) {}
+            try { window.parent.postMessage({ __deliLog: line }, '*'); } catch (x) {}
+          }
 
           function clean(s) { return (s || '').replace(/\s+/g, ' ').trim(); }
 
@@ -1113,7 +1163,7 @@ class ChatBridge(
                 var v = window[names[i]];
                 if (v && typeof v.setOwnUserId === 'function') {
                   vEngine = v;
-                  DeliChat.log('echo-guard: engine found as window.' + names[i]);
+                  safeLog('echo-guard: engine found as window.' + names[i]);
                   return v;
                 }
               } catch (e) {}
@@ -1135,14 +1185,14 @@ class ChatBridge(
               engine.setOwnUserId = function (id) {
                 if (typeof id === 'number' && id > 0) vOwnUid = id;
                 var want = (id > 0 || vOwnUid <= 0) ? id : vOwnUid;
-                DeliChat.log('echo-guard: setOwnUserId(' + id + ') -> ' + want);
+                safeLog('echo-guard: setOwnUserId(' + id + ') -> ' + want);
                 return orig(want);
               };
               engine.__deliEcho = true;
-              DeliChat.log('echo-guard: engine armed');
+              safeLog('echo-guard: engine armed');
               return true;
             } catch (x) {
-              DeliChat.log('echo-guard: could not arm (' + x + ')');
+              safeLog('echo-guard: could not arm (' + x + ')');
               return false;
             }
           }
@@ -1171,13 +1221,13 @@ class ChatBridge(
                     merged.googNoiseSuppression = true;
                     merged.googHighpassFilter = true;
                     out.audio = merged;
-                    DeliChat.log('mic constraints -> ' + JSON.stringify(merged));
+                    safeLog('mic constraints -> ' + JSON.stringify(merged));
                   }
                 } catch (x) {}
                 return orig(out);
               };
               md.__deliMic = true;
-              DeliChat.log('mic hardened');
+              safeLog('mic hardened');
               return true;
             } catch (e) {
               return false;
@@ -1213,7 +1263,7 @@ class ChatBridge(
             var uid = audioUid(data);
             if (uid <= 0) return;
             if (uid === vFrames.own) vFrames.seenOwn++;
-            else { vFrames.own = uid; vFrames.seenOwn = 1; DeliChat.log('voice: own audio id ' + uid); }
+            else { vFrames.own = uid; vFrames.seenOwn = 1; safeLog('voice: own audio id ' + uid); }
             // A frame this page sent itself cannot belong to anybody else, so one send is
             // enough: the echo filter used to wait for a second frame, and the first
             // thing anyone heard after unmuting was themselves.
@@ -1228,7 +1278,7 @@ class ChatBridge(
             if (audioUid(data) !== vFrames.own) return false;
             vFrames.dropped++;
             if (vFrames.dropped === 1 || vFrames.dropped % 100 === 0) {
-              DeliChat.log('voice: dropped ' + vFrames.dropped + ' own audio frame(s)');
+              safeLog('voice: dropped ' + vFrames.dropped + ' own audio frame(s)');
             }
             return true;
           }
@@ -1291,10 +1341,10 @@ class ChatBridge(
                   return remove.apply(this, arguments);
                 };
               }
-              DeliChat.log('voice: sockets filtered');
+              safeLog('voice: sockets filtered');
               return true;
             } catch (e) {
-              DeliChat.log('voice: could not filter sockets (' + e + ')');
+              safeLog('voice: could not filter sockets (' + e + ')');
               return false;
             }
           }
@@ -1441,13 +1491,13 @@ class ChatBridge(
               did.push(press('deaf', RE_DEAF, RE_MIC));
               vLocal.deafened = !state.deafened;
             }
-            DeliChat.log('voice: ' + JSON.stringify(data) + ' -> ' + did.join(',') +
+            safeLog('voice: ' + JSON.stringify(data) + ' -> ' + did.join(',') +
               ' state=' + JSON.stringify(voiceState()) +
               ' can(' + VOICE_FN.mic.join('/') + ')=' + voiceControlReport());
             // One look at the call's markup right after a command, so the panel can be
             // wired to what the room actually renders instead of to a guess.
             setTimeout(function () {
-              try { DeliChat.log('voice-after: ' + JSON.stringify(voiceInventory())); } catch (e) {}
+              try { safeLog('voice-after: ' + JSON.stringify(voiceInventory())); } catch (e) {}
             }, 900);
             push();
           }
@@ -1460,13 +1510,18 @@ class ChatBridge(
               var encoded = JSON.stringify(snap);
               if (encoded === last) return;
               last = encoded;
-              DeliChat.post(encoded);
+              try {
+                if (typeof window.DeliChat !== 'undefined' && window.DeliChat && typeof window.DeliChat.post === 'function') {
+                  window.DeliChat.post(encoded);
+                }
+              } catch (x) {}
+              try { window.parent.postMessage({ __deliSnap: encoded }, '*'); } catch (x) {}
             } catch (e) { /* mid-render: the next tick catches it */ }
           }
 
           function typeAndSend(text) {
             var box = document.getElementById('input-text-chat');
-            DeliChat.log('send: box=' + (box ? 'yes' : 'no'));
+            safeLog('send: box=' + (box ? 'yes' : 'no'));
             if (!box) return;
             box.focus();
             box.value = text;
@@ -1477,13 +1532,13 @@ class ChatBridge(
             };
             var a = box.dispatchEvent(new KeyboardEvent('keydown', enter));
             var b = box.dispatchEvent(new KeyboardEvent('keypress', enter));
-            DeliChat.log('send: value="' + box.value + '" keydownDefault=' + a + ' keypressDefault=' + b);
+            safeLog('send: value="' + box.value + '" keydownDefault=' + a + ' keypressDefault=' + b);
           }
 
           // The parent posts our commands in; everything else is the room's own traffic.
           window.addEventListener('message', function (event) {
             var data = event.data;
-            try { DeliChat.log('msg: ' + (typeof data) + ' ' + JSON.stringify(data).slice(0, 180)); } catch (x) {}
+            try { safeLog('msg: ' + (typeof data) + ' ' + JSON.stringify(data).slice(0, 180)); } catch (x) {}
             if (typeof data === 'string' && data.indexOf('__deli') !== -1) {
               try { data = JSON.parse(data); } catch (e) { return; }
             }
@@ -1506,8 +1561,8 @@ class ChatBridge(
               voiceCommand(data);
             }
             if (data && data.__deli === 'voice-inspect') {
-              try { DeliChat.log('voice-inventory: ' + JSON.stringify(voiceInventory())); }
-              catch (e) { DeliChat.log('voice-inventory failed: ' + e); }
+              try { safeLog('voice-inventory: ' + JSON.stringify(voiceInventory())); }
+              catch (e) { safeLog('voice-inventory failed: ' + e); }
             }
           });
 
@@ -1520,8 +1575,8 @@ class ChatBridge(
             // One look at what this build of the room calls its call controls, so the
             // panel can be checked against the real thing instead of guessed at.
             setTimeout(function () {
-              try { DeliChat.log('inventory: ' + JSON.stringify(voiceInventory())); }
-              catch (e) { DeliChat.log('inventory failed: ' + e); }
+              try { safeLog('inventory: ' + JSON.stringify(voiceInventory())); }
+              catch (e) { safeLog('inventory failed: ' + e); }
             }, 2500);
             push();
           }

@@ -140,7 +140,7 @@ fun FeedScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // The community's own picture off its page's sidebar, and its initial
                     // until that page has answered.
-                    HoleLogo(url = holeLogo, name = hole, size = 42.dp)
+                    HoleLogo(url = holeLogo, name = hole, size = 42.dp, autoFetch = true)
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

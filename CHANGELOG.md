@@ -4,6 +4,12 @@ Her sürümün kurulum dosyası ve kısa özeti GitHub sürüm sayfasındadır. 
 güncellemeden sonra `WhatsNew` ekranında gösterilir. Bu dosya yalnızca neyin ne zaman
 değiştiğini tek yerde tutar.
 
+## 1.4.0
+
+- Sohbet bağlantısı ve mesaj akışı kararlı hale getirildi (WebView iframe köprüsü iyileştirildi).
+- Topluluklar sekmesindeki kasma ve donma sorunları giderildi, topluluk listesi hızlandırıldı.
+- Eksi oy (downvote) göstergesi ve animasyonu belirginleştirildi; oy verildiğinde ikon vurgulu hale geliyor.
+
 ## 1.3.9
 
 - Görsel indirme butonu yenilendi: Tam ekran görsel görüntüleyicide ekranın tepesinde kapatma ve simgeli indirme butonu yer alıyor.
