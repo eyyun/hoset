@@ -157,8 +157,8 @@ object DeliPalettes {
             primary = Color(0xFF805AD5),
             primaryContainer = Color(0xFF3B2A63),
             blue = Color(0xFF58A6FF),
-            upvote = Color(0xFFFD7E14),
-            downvote = Color(0xFF38B2AC),
+            upvote = Color(0xFF805AD5),
+            downvote = Color(0xFF818CF8),
             success = Color(0xFF3FB950),
             warning = Color(0xFFD29922),
             danger = Color(0xFFF85149),
@@ -1217,7 +1217,7 @@ object DeliColors {
     val Primary: Color get() = current.value.primary
     val PrimaryContainer: Color get() = current.value.primaryContainer
     val Blue: Color get() = current.value.blue
-    val Upvote: Color get() = current.value.upvote
+    val Upvote: Color get() = current.value.primary
     val Downvote: Color get() = current.value.downvote
     val Success: Color get() = current.value.success
     val Warning: Color get() = current.value.warning

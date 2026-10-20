@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -89,7 +90,10 @@ fun FeedScreen(
     val holeLogo by vm.holeLogo.collectAsStateWithLifecycle()
     val holeDisplayName by vm.holeDisplayName.collectAsStateWithLifecycle()
     val vmMessage by vm.message.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = vm.savedScrollIndex,
+        initialFirstVisibleItemScrollOffset = vm.savedScrollOffset,
+    )
     val context = LocalContext.current
     val reduceMotion = remember { com.delidehset.mobile.data.HosetPrefs.reduceMotion(context) }
     val pull = rememberManualRefresh(state.loading)
@@ -110,11 +114,26 @@ fun FeedScreen(
         vm.start(hole = hole, sort = initialSort, effortOnly = effortOnly)
     }
 
-    // Choosing a sort replaces the list, and the list keeps its scroll offset — which left
-    // the person in the middle of a list they had not seen the top of. Any change of sort
-    // starts at the top again.
+    // Explicit sort change: resets list to the top only when sort actually changes.
+    // Returning from a post or recomposition preserves the scroll position.
+    var lastSort by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.sort) {
-        runCatching { listState.scrollToItem(0) }
+        if (lastSort != null && lastSort != state.sort.name) {
+            vm.savedScrollIndex = 0
+            vm.savedScrollOffset = 0
+            runCatching { listState.scrollToItem(0) }
+        }
+        lastSort = state.sort.name
+    }
+
+    // Continuously remember scroll position in ViewModel so navigating to a post and back stays at the exact position
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) ->
+                vm.savedScrollIndex = idx
+                vm.savedScrollOffset = off
+            }
     }
 
     // Infinite scroll: ask for the next page a little before the end.

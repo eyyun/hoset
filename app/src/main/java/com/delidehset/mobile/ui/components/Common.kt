@@ -422,7 +422,7 @@ private fun VoteArrow(
 ) {
     val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
     val scale by animateFloatAsState(
-        targetValue = if (active) 1.15f else 1.0f,
+        targetValue = if (active) 1.08f else 1.0f,
         animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 850f),
         label = "vote-arrow",
     )
@@ -447,12 +447,12 @@ private fun VoteArrow(
         ) {
             val w = this.size.width
             val h = this.size.height
-            val dx = w * 0.26f
-            val dy = h * 0.16f
+            val dx = w * 0.25f
+            val dy = h * 0.15f
             val cy = h * 0.50f
             val topY = if (up) cy - dy else cy + dy
             val sideY = if (up) cy + dy else cy - dy
-            val strokePx = (if (active) 3.5.dp else 1.8.dp).toPx()
+            val strokePx = (if (active) 2.2.dp else 1.5.dp).toPx()
             val path = androidx.compose.ui.graphics.Path().apply {
                 moveTo(w * 0.5f - dx, sideY)
                 lineTo(w * 0.5f, topY)

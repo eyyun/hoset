@@ -238,10 +238,13 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    var savedScrollIndex: Int = 0
+    var savedScrollOffset: Int = 0
+
     fun consumeMessage() { _message.value = null }
 
     fun start(hole: String?, sort: FeedSort, effortOnly: Boolean = false) {
-        if (started && _state.value.hole == hole && _state.value.sort == sort) return
+        if (started && _state.value.hole == hole && _state.value.effortOnly == effortOnly) return
         started = true
         _holeFollowing.value = null
         _holeBlocked.value = null
@@ -335,17 +338,26 @@ class FeedViewModel(private val repo: DeliRepository) : ViewModel() {
 
     fun setSort(sort: FeedSort) {
         if (_state.value.sort == sort) return
+        savedScrollIndex = 0
+        savedScrollOffset = 0
         _state.update { it.copy(sort = sort, posts = emptyList(), nextCursor = null, endReached = false) }
         load(reset = true, force = false)
     }
 
     fun setEffortOnly(value: Boolean) {
+        if (_state.value.effortOnly == value) return
+        savedScrollIndex = 0
+        savedScrollOffset = 0
         _state.update { it.copy(effortOnly = value, posts = emptyList(), nextCursor = null, endReached = false) }
         load(reset = true, force = false)
     }
 
     /** Explicit user pull-to-refresh always goes to the network. */
-    fun refresh() = load(reset = true, force = true)
+    fun refresh() {
+        savedScrollIndex = 0
+        savedScrollOffset = 0
+        load(reset = true, force = true)
+    }
 
     fun loadMore() {
         val s = _state.value
