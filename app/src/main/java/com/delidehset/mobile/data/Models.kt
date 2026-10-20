@@ -144,18 +144,55 @@ data class HoleState(
     val displayName: String? = null,
 )
 
+data class HoleRule(
+    val text: String,
+)
+
+data class HoleFlair(
+    val text: String,
+    val color: String? = null,
+)
+
+data class HoleMemberAction(
+    val username: String,
+    val date: String? = null,
+    val reason: String? = null,
+)
+
+data class HoleModReport(
+    val id: String,
+    val kind: String = "post",
+    val content: String = "",
+    val reason: String = "",
+    val reporter: String = "",
+)
+
 /**
  * A community's settings, as its own `/h/{name}/settings` page presents them.
- *
- * Only the three the app can edit: the display name, the picture and the content
- * filters. Everything else on that page stays where the site put it.
  */
 data class HoleSettings(
     val hole: String,
     val displayName: String = "",
     val blockedIps: String = "",
     val blockedWords: String = "",
+    val customDomain: String = "",
+    val titleEditWindow: String = "",
+    val joinType: String = "",
     val logoUrl: String? = null,
+    val logoUploadAction: String? = null,
+    val logoUploadField: String? = null,
+    val rules: List<HoleRule> = emptyList(),
+    val flairs: List<HoleFlair> = emptyList(),
+    val userFlairs: List<HoleFlair> = emptyList(),
+    val pendingRequests: List<HoleMemberAction> = emptyList(),
+    val blockedMembers: List<HoleMemberAction> = emptyList(),
+    val stealth: Boolean = false,
+    val publicUse: Boolean = false,
+    val hideModList: Boolean = false,
+    val anonPosting: Boolean = false,
+    val allowCustomUserFlairs: Boolean = false,
+    val banners: List<String> = emptyList(),
+    val reports: List<HoleModReport> = emptyList(),
     /** False on a page the account is allowed to read but not to change. */
     val canEdit: Boolean = false,
 )

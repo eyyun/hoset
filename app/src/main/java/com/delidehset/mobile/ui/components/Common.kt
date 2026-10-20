@@ -422,8 +422,8 @@ private fun VoteArrow(
 ) {
     val accent = if (up) DeliColors.Upvote else DeliColors.Downvote
     val scale by animateFloatAsState(
-        targetValue = if (active) 1.14f else 0.94f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.42f, stiffness = 900f),
+        targetValue = if (active) 1.15f else 1.0f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 850f),
         label = "vote-arrow",
     )
     val tint = when {
@@ -433,24 +433,41 @@ private fun VoteArrow(
     }
     Box(
         modifier = Modifier
-            .size(size + 8.dp)
-            .clip(CircleShape)
-            .background(if (active) accent.copy(alpha = 0.22f) else Color.Transparent)
-            .border(1.dp, if (active) accent.copy(alpha = 0.45f) else Color.Transparent, CircleShape)
+            .size(size + 6.dp)
             .then(if (canVote) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = if (up) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (up) "Upvote" else "Downvote",
-            tint = tint,
+        androidx.compose.foundation.Canvas(
             modifier = Modifier
-                .size(if (active) size + 2.dp else size)
+                .size(size)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
                 },
-        )
+        ) {
+            val w = this.size.width
+            val h = this.size.height
+            val dx = w * 0.26f
+            val dy = h * 0.16f
+            val cy = h * 0.50f
+            val topY = if (up) cy - dy else cy + dy
+            val sideY = if (up) cy + dy else cy - dy
+            val strokePx = (if (active) 3.5.dp else 1.8.dp).toPx()
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.5f - dx, sideY)
+                lineTo(w * 0.5f, topY)
+                lineTo(w * 0.5f + dx, sideY)
+            }
+            drawPath(
+                path = path,
+                color = tint,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokePx,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                ),
+            )
+        }
     }
 }
 

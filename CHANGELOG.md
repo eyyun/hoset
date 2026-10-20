@@ -4,6 +4,13 @@ Her sürümün kurulum dosyası ve kısa özeti GitHub sürüm sayfasındadır. 
 güncellemeden sonra `WhatsNew` ekranında gösterilir. Bu dosya yalnızca neyin ne zaman
 değiştiğini tek yerde tutar.
 
+## 1.4.1
+
+- Topluluk yönetimi sekme sistemi tamamlandı: Genel, İçerik filtreleri, Katılım/Üyelik, Gizlilik, Flairlar ve kurallar, Görünüm, Lua betikleri ve Mod raporları eklendi.
+- Topluluk görseli ve banner yükleme altyapısı düzeltildi, görsel seçildiğinde kare kırpma ekranı entegre edildi.
+- Gönderi paylaşımına galeriden görsel seçme, önizleme ve görsel ile gönderme desteği eklendi.
+- Oy butonlarının tasarımı sadeleştirildi: Halka kaldırıldı, seçili oklar düz renkli ve kalın çizgili hale getirildi.
+
 ## 1.4.0
 
 - Sohbet bağlantısı ve mesaj akışı kararlı hale getirildi (WebView iframe köprüsü iyileştirildi).

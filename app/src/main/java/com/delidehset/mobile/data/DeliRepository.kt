@@ -673,6 +673,7 @@ class DeliRepository(
         nsfw: Boolean = false,
         anonymous: Boolean = false,
         tripcodeSecret: String? = null,
+        image: Triple<String, String, ByteArray>? = null,
     ): ActionResult {
         ensureAntiforgery()
         val fields = mutableListOf<Pair<String, String>>()
@@ -695,7 +696,12 @@ class DeliRepository(
             }
         }
 
-        val res = http.postMultipart("/submit", fields, referer = "/submit")
+        val fileParts = image?.let {
+            listOf(DeliHttp.UploadFilePart("files", it.first, it.second, it.third))
+        } ?: emptyList()
+
+        val path = if (hole.isNotBlank()) "/h/${encodeSegment(hole)}/submit" else "/submit"
+        val res = http.postMultipart(path, fields, files = fileParts, referer = path)
         return interpret(res)
     }
 
@@ -919,7 +925,14 @@ class DeliRepository(
         return HtmlParser.parseHoleSettings(body, hole)
     }
 
-    suspend fun saveHoleSettings(hole: String, displayName: String, blockedIps: String, blockedWords: String): ActionResult {
+    suspend fun saveHoleSettings(
+        hole: String,
+        displayName: String,
+        blockedIps: String,
+        blockedWords: String,
+        customDomain: String = "",
+        titleEditWindow: String = "",
+    ): ActionResult {
         val name = encodeSegment(hole)
         ensureAntiforgery()
         val display = http.postForm(
@@ -932,10 +945,134 @@ class DeliRepository(
             listOf("blocked_ip_ranges" to blockedIps, "blocked_words" to blockedWords),
             referer = "/h/$name/settings?tab=filters",
         )
+        if (customDomain.isNotBlank()) {
+            http.postForm(
+                "/h/$name/custom_domain",
+                listOf("domain" to customDomain),
+                referer = "/h/$name/settings?tab=appearance",
+            )
+        }
+        if (titleEditWindow.isNotBlank()) {
+            http.postForm(
+                "/h/$name/title_edit_window",
+                listOf("minutes" to titleEditWindow),
+                referer = "/h/$name/settings?tab=general",
+            )
+        }
         cache.clear()
         val displayResult = interpret(display, tr("Topluluk ayarları"))
         val filterResult = interpret(filters, tr("İçerik filtreleri"))
         return if (!displayResult.ok) displayResult else filterResult
+    }
+
+    suspend fun addHoleRule(hole: String, text: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/rules/add",
+            listOf("text" to text),
+            referer = "/h/$name/settings?tab=flairs_rules",
+        )
+        cache.clear()
+        return interpret(res, tr("Kural ekleme"))
+    }
+
+    suspend fun deleteHoleRule(hole: String, text: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/rules/delete",
+            listOf("text" to text),
+            referer = "/h/$name/settings?tab=flairs_rules",
+        )
+        cache.clear()
+        return interpret(res, tr("Kural silme"))
+    }
+
+    suspend fun addHoleFlair(hole: String, text: String, color: String? = null): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val fields = mutableListOf("text" to text)
+        if (!color.isNullOrBlank()) fields += "color" to color
+        val res = http.postForm(
+            "/h/$name/flairs/add",
+            fields,
+            referer = "/h/$name/settings?tab=flairs_rules",
+        )
+        cache.clear()
+        return interpret(res, tr("Etiket ekleme"))
+    }
+
+    suspend fun deleteHoleFlair(hole: String, text: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/flairs/delete",
+            listOf("text" to text),
+            referer = "/h/$name/settings?tab=flairs_rules",
+        )
+        cache.clear()
+        return interpret(res, tr("Etiket silme"))
+    }
+
+    suspend fun approveJoinRequest(hole: String, username: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/join/approve",
+            listOf("username" to username),
+            referer = "/h/$name/settings?tab=members",
+        )
+        cache.clear()
+        return interpret(res, tr("İstek onaylama"))
+    }
+
+    suspend fun declineJoinRequest(hole: String, username: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/join/decline",
+            listOf("username" to username),
+            referer = "/h/$name/settings?tab=members",
+        )
+        cache.clear()
+        return interpret(res, tr("İstek reddetme"))
+    }
+
+    suspend fun blockJoinMember(hole: String, username: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/join/block",
+            listOf("username" to username),
+            referer = "/h/$name/settings?tab=members",
+        )
+        cache.clear()
+        return interpret(res, tr("Üye engelleme"))
+    }
+
+    suspend fun unblockJoinMember(hole: String, username: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/join/unblock",
+            listOf("username" to username),
+            referer = "/h/$name/settings?tab=members",
+        )
+        cache.clear()
+        return interpret(res, tr("Engel kaldırma"))
+    }
+
+    suspend fun exileHoleUser(hole: String, username: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/exile",
+            listOf("username" to username),
+            referer = "/h/$name/settings?tab=members",
+        )
+        cache.clear()
+        return interpret(res, tr("Kullanıcı sürgün etme"))
     }
 
     /** The community's picture, posted to the form the settings page renders. */
@@ -944,12 +1081,16 @@ class DeliRepository(
         fileName: String,
         contentType: String,
         bytes: ByteArray,
+        customPath: String? = null,
+        customField: String? = null,
     ): ActionResult {
         ensureAntiforgery()
         val name = encodeSegment(hole)
+        val path = customPath ?: "/h/$name/marsey_image"
+        val field = customField ?: "marsey"
         val res = http.postFile(
-            path = "/h/$name/marsey_image",
-            fieldName = "marsey",
+            path = path,
+            fieldName = field,
             fileName = fileName,
             contentType = contentType,
             bytes = bytes,
@@ -957,6 +1098,111 @@ class DeliRepository(
         )
         cache.clear()
         return interpretPictureResponse(res)
+    }
+
+    suspend fun saveJoinSettings(hole: String, joinType: String, allowCustomFlairs: Boolean = false): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/join_settings",
+            listOf(
+                "join_type" to joinType,
+                "allow_custom_user_flairs" to allowCustomFlairs.toString(),
+            ),
+            referer = "/h/$name/settings?tab=membership",
+        )
+        cache.clear()
+        return interpret(res, tr("Katılım ayarları"))
+    }
+
+    suspend fun addUserFlairDef(hole: String, text: String, color: String? = null): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val fields = mutableListOf("text" to text)
+        if (!color.isNullOrBlank()) fields += "color" to color
+        val res = http.postForm(
+            "/h/$name/user_flairs/add",
+            fields,
+            referer = "/h/$name/settings?tab=membership",
+        )
+        cache.clear()
+        return interpret(res, tr("Kullanıcı etiketi"))
+    }
+
+    suspend fun deleteUserFlairDef(hole: String, text: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/h/$name/user_flairs/delete",
+            listOf("text" to text),
+            referer = "/h/$name/settings?tab=membership",
+        )
+        cache.clear()
+        return interpret(res, tr("Kullanıcı etiketi silme"))
+    }
+
+    suspend fun toggleHoleStealth(hole: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm("/h/$name/stealth", emptyList(), referer = "/h/$name/settings?tab=privacy")
+        cache.clear()
+        return interpret(res, tr("Gizli mod"))
+    }
+
+    suspend fun toggleHolePublicUse(hole: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm("/h/$name/public_use", emptyList(), referer = "/h/$name/settings?tab=privacy")
+        cache.clear()
+        return interpret(res, tr("Herkese açık mod"))
+    }
+
+    suspend fun toggleHoleModList(hole: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm("/h/$name/modlist", emptyList(), referer = "/h/$name/settings?tab=privacy")
+        cache.clear()
+        return interpret(res, tr("Moderatör listesi"))
+    }
+
+    suspend fun toggleHoleAnonPosting(hole: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm("/h/$name/anon_posting", emptyList(), referer = "/h/$name/settings?tab=privacy")
+        cache.clear()
+        return interpret(res, tr("Anonim gönderi"))
+    }
+
+    suspend fun uploadHoleBanner(
+        hole: String,
+        fileName: String,
+        contentType: String,
+        bytes: ByteArray,
+    ): ActionResult {
+        ensureAntiforgery()
+        val name = encodeSegment(hole)
+        val res = http.postFile(
+            path = "/h/$name/banner",
+            fieldName = "banner",
+            fileName = fileName,
+            contentType = contentType,
+            bytes = bytes,
+            referer = "/h/$name/settings?tab=appearance",
+        )
+        cache.clear()
+        return interpretPictureResponse(res)
+    }
+
+    suspend fun deleteModReport(hole: String, reportId: String): ActionResult {
+        val name = encodeSegment(hole)
+        ensureAntiforgery()
+        val res = http.postForm(
+            "/report/delete",
+            listOf("id" to reportId, "hole" to hole),
+            referer = "/h/$name/settings?tab=reports",
+        )
+        cache.clear()
+        return interpret(res, tr("Rapor"))
     }
 
     /** The site's rules, which the app shows once before the rest of the app is used. */
@@ -1110,25 +1356,53 @@ private val actionJson = Json { ignoreUnknownKeys = true; isLenient = true }
  * answer without a stored URL is treated as a failure, never as a silent success.
  */
 internal fun interpretPictureResponse(res: DeliResponse): ActionResult {
+    if (res.isRedirect) {
+        val loc = res.location.orEmpty()
+        return if (loc.contains("/login")) {
+            ActionResult(false, tr("Görsel yüklemek için oturum açman gerekiyor."), res)
+        } else {
+            ActionResult(true, null, res)
+        }
+    }
     if (res.isJson) {
         val root = runCatching { actionJson.parseToJsonElement(res.body).jsonObject }.getOrNull()
         if (root != null) {
+            val error = root["error"]?.let {
+                runCatching { it.jsonPrimitive.content }.getOrNull()
+            }?.takeIf { it.isNotBlank() }
+            if (error != null) {
+                return ActionResult(false, error, res)
+            }
+
             val meta = root["meta"] as? kotlinx.serialization.json.JsonObject
-            val status = runCatching { meta?.get("status")?.jsonPrimitive?.content }.getOrNull()
-            val message = runCatching {
+            val metaStatus = runCatching { meta?.get("status")?.jsonPrimitive?.content }.getOrNull()
+            val metaMessage = runCatching {
                 (meta?.get("messages") as? kotlinx.serialization.json.JsonArray)
                     ?.firstOrNull()?.jsonPrimitive?.content
             }.getOrNull()?.takeIf { it.isNotBlank() && it != "[]" }
+
+            val success = runCatching {
+                root["success"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
+            }.getOrNull()
+            val rootMsg = root["message"]?.let {
+                runCatching { it.jsonPrimitive.content }.getOrNull()
+            }?.takeIf { it.isNotBlank() }
+
+            val data = root["data"] as? kotlinx.serialization.json.JsonObject
             val url = runCatching {
-                (root["data"] as? kotlinx.serialization.json.JsonObject)
-                    ?.let { d -> (d["profileurl"] ?: d["bannerurl"])?.jsonPrimitive?.content }
+                data?.let { d ->
+                    (d["profileurl"] ?: d["bannerurl"] ?: d["url"] ?: d["logourl"] ?: d["marseyurl"] ?: d["image"])
+                        ?.jsonPrimitive?.content
+                }
             }.getOrNull()?.takeIf { it.isNotBlank() }
 
-            if (url != null) return ActionResult(true, null, res)
+            if (url != null || success == true) {
+                return ActionResult(true, rootMsg ?: metaMessage, res)
+            }
             return ActionResult(
                 ok = false,
-                message = message
-                    ?: if (status == "false") tr("Sunucu görseli kabul etmedi.") else tr("Görsel kaydedilmedi."),
+                message = metaMessage ?: rootMsg
+                    ?: if (metaStatus == "false") tr("Sunucu görseli kabul etmedi.") else tr("Görsel kaydedilmedi."),
                 raw = res,
             )
         }

@@ -109,6 +109,13 @@ class DeliHttp(private val cookies: DeliCookieJar) {
         execute(build("POST", path, "application/json,*/*", referer).post(body).build())
     }
 
+    data class UploadFilePart(
+        val fieldName: String,
+        val fileName: String,
+        val contentType: String,
+        val bytes: ByteArray,
+    )
+
     /**
      * The site's submit form is posted as multipart/form-data
      * (`submitPostMultipart`), because it can carry image uploads.
@@ -116,10 +123,15 @@ class DeliHttp(private val cookies: DeliCookieJar) {
     suspend fun postMultipart(
         path: String,
         fields: List<Pair<String, String>>,
+        files: List<UploadFilePart> = emptyList(),
         referer: String? = null,
     ): DeliResponse = withContext(Dispatchers.IO) {
         val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
         for ((k, v) in fields) builder.addFormDataPart(k, v)
+        for (f in files) {
+            val part = f.bytes.toRequestBody(f.contentType.toMediaType(), 0, f.bytes.size)
+            builder.addFormDataPart(f.fieldName, f.fileName, part)
+        }
         antiforgery.get()?.let { builder.addFormDataPart(FORM_TOKEN, it) }
         execute(build("POST", path, "text/html,application/json,*/*", referer).post(builder.build()).build())
     }

@@ -779,6 +779,54 @@ class HoleSettingsViewModel(private val repo: DeliRepository) : ViewModel() {
         }
     }
 
+    fun saveGeneral(hole: String, displayName: String, customDomain: String, titleEditWindow: String) {
+        if (_state.value.saving) return
+        _state.value = _state.value.copy(saving = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            val ips = _state.value.settings?.blockedIps.orEmpty()
+            val words = _state.value.settings?.blockedWords.orEmpty()
+            runCatching {
+                repo.saveHoleSettings(
+                    hole = hole,
+                    displayName = displayName,
+                    blockedIps = ips,
+                    blockedWords = words,
+                    customDomain = customDomain,
+                    titleEditWindow = titleEditWindow,
+                )
+            }.onSuccess { result ->
+                _state.value = _state.value.copy(
+                    saving = false,
+                    message = if (result.ok) tr("Topluluk ayarları kaydedildi.") else null,
+                    error = if (result.ok) null else result.message ?: tr("Ayarlar kaydedilemedi."),
+                )
+                if (result.ok) load(hole, force = true)
+            }.onFailure {
+                _state.value = _state.value.copy(saving = false, error = DeliErrors.explain(it))
+            }
+        }
+    }
+
+    fun saveFilters(hole: String, blockedIps: String, blockedWords: String) {
+        if (_state.value.saving) return
+        _state.value = _state.value.copy(saving = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            val display = _state.value.settings?.displayName.orEmpty()
+            runCatching { repo.saveHoleSettings(hole, display, blockedIps, blockedWords) }
+                .onSuccess { result ->
+                    _state.value = _state.value.copy(
+                        saving = false,
+                        message = if (result.ok) tr("İçerik filtreleri kaydedildi.") else null,
+                        error = if (result.ok) null else result.message ?: tr("Filtreler kaydedilemedi."),
+                    )
+                    if (result.ok) load(hole, force = true)
+                }
+                .onFailure {
+                    _state.value = _state.value.copy(saving = false, error = DeliErrors.explain(it))
+                }
+        }
+    }
+
     fun uploadLogo(hole: String, fileName: String, contentType: String, bytes: ByteArray) {
         if (_state.value.uploading) return
         _state.value = _state.value.copy(uploading = true, message = null, error = null)
@@ -795,6 +843,166 @@ class HoleSettingsViewModel(private val repo: DeliRepository) : ViewModel() {
                 .onFailure {
                     _state.value = _state.value.copy(uploading = false, error = DeliErrors.explain(it))
                 }
+        }
+    }
+
+    fun uploadBanner(hole: String, fileName: String, contentType: String, bytes: ByteArray) {
+        if (_state.value.uploading) return
+        _state.value = _state.value.copy(uploading = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.uploadHoleBanner(hole, fileName, contentType, bytes) }
+                .onSuccess { result ->
+                    _state.value = _state.value.copy(
+                        uploading = false,
+                        message = if (result.ok) tr("Afiş yüklendi.") else null,
+                        error = if (result.ok) null else result.message ?: tr("Afiş yüklenemedi."),
+                    )
+                    if (result.ok) load(hole, force = true)
+                }
+                .onFailure {
+                    _state.value = _state.value.copy(uploading = false, error = DeliErrors.explain(it))
+                }
+        }
+    }
+
+    fun saveJoin(hole: String, joinType: String, allowCustomFlairs: Boolean) {
+        if (_state.value.saving) return
+        _state.value = _state.value.copy(saving = true, message = null, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.saveJoinSettings(hole, joinType, allowCustomFlairs) }
+                .onSuccess { result ->
+                    _state.value = _state.value.copy(
+                        saving = false,
+                        message = if (result.ok) tr("Katılım ayarları kaydedildi.") else null,
+                        error = if (result.ok) null else result.message ?: tr("Ayarlar kaydedilemedi."),
+                    )
+                    if (result.ok) load(hole, force = true)
+                }
+                .onFailure {
+                    _state.value = _state.value.copy(saving = false, error = DeliErrors.explain(it))
+                }
+        }
+    }
+
+    fun addRule(hole: String, text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.addHoleRule(hole, text) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun deleteRule(hole: String, text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.deleteHoleRule(hole, text) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun addFlair(hole: String, text: String, color: String? = null) {
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.addHoleFlair(hole, text, color) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun deleteFlair(hole: String, text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.deleteHoleFlair(hole, text) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun addUserFlair(hole: String, text: String, color: String? = null) {
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.addUserFlairDef(hole, text, color) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun deleteUserFlair(hole: String, text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.deleteUserFlairDef(hole, text) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun approveJoin(hole: String, username: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.approveJoinRequest(hole, username) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun declineJoin(hole: String, username: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.declineJoinRequest(hole, username) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun blockJoin(hole: String, username: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.blockJoinMember(hole, username) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun unblockJoin(hole: String, username: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.unblockJoinMember(hole, username) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun exileUser(hole: String, username: String) {
+        if (username.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.exileHoleUser(hole, username) }
+                .onSuccess { res ->
+                    _state.value = _state.value.copy(
+                        message = if (res.ok) tr("Kullanıcı sürgün edildi.") else null,
+                        error = if (res.ok) null else res.message ?: tr("İşlem başarısız."),
+                    )
+                    if (res.ok) load(hole, force = true)
+                }
+        }
+    }
+
+    fun toggleStealth(hole: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.toggleHoleStealth(hole) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun togglePublicUse(hole: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.toggleHolePublicUse(hole) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun toggleModList(hole: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.toggleHoleModList(hole) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun toggleAnonPosting(hole: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.toggleHoleAnonPosting(hole) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
+        }
+    }
+
+    fun deleteReport(hole: String, reportId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { repo.deleteModReport(hole, reportId) }
+                .onSuccess { if (it.ok) load(hole, force = true) }
         }
     }
 
@@ -1536,6 +1744,7 @@ class SubmitViewModel(private val repo: DeliRepository) : ViewModel() {
         nsfw: Boolean,
         anonymous: Boolean,
         tripcodeSecret: String?,
+        image: Triple<String, String, ByteArray>? = null,
     ) {
         if (title.isBlank() || hole.isBlank()) {
             _state.update { it.copy(error = "Başlık ve topluluk zorunlu.") }
@@ -1549,7 +1758,7 @@ class SubmitViewModel(private val repo: DeliRepository) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             var failure: Throwable? = null
             val res = runCatching {
-                repo.submitPost(_state.value.form, title, body, hole, nsfw, anonymous, tripcodeSecret)
+                repo.submitPost(_state.value.form, title, body, hole, nsfw, anonymous, tripcodeSecret, image)
             }.onFailure { failure = it }.getOrNull()
             if (res?.ok == true) {
                 _state.update { it.copy(sending = false, done = true, message = tr("Gönderi paylaşıldı.")) }

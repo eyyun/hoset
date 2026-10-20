@@ -359,17 +359,125 @@ object HtmlParser {
         // Textareas carry the saved value as their text, not as an attribute.
         val ips = main.selectFirst("textarea[name=blocked_ip_ranges]")?.text().orEmpty()
         val words = main.selectFirst("textarea[name=blocked_words]")?.text().orEmpty()
-        val logo = main.selectFirst("img[alt=Hole logo]")?.attr("src")?.trim()?.takeIf { it.isNotBlank() }
+        val customDomain = main.selectFirst("input[name=custom_domain], input[name=domain]")?.attr("value")?.trim().orEmpty()
+        val titleEditWindow = main.selectFirst("input[name=title_edit_window], input[name=edit_window]")?.attr("value")?.trim().orEmpty()
+        val joinType = main.selectFirst("select[name=join_type] option[selected]")?.attr("value")
+            ?: main.selectFirst("select[name=join_type] option")?.attr("value").orEmpty()
+
+        val logo = main.selectFirst("img[alt=Hole logo], img[alt$=\"icon\"], img.hole-logo")?.attr("src")?.trim()?.takeIf { it.isNotBlank() }
         HoleStore.put(hole, logo = logo, label = display)
+
+        val fileInput = main.selectFirst("input[type=file]")
+        val uploadField = fileInput?.attr("name")?.takeIf { it.isNotBlank() } ?: "marsey"
+        val uploadForm = fileInput?.parents()?.firstOrNull { it.tagName() == "form" && it.hasAttr("action") }
+        val uploadAction = uploadForm?.attr("action")?.takeIf { it.isNotBlank() } ?: "/h/$hole/marsey_image"
+
+        val rules = mutableListOf<HoleRule>()
+        for (btn in main.select("[onclick*=deleteHoleRule]")) {
+            val onclick = btn.attr("onclick")
+            val text = onclick.substringAfter("deleteHoleRule(").substringAfter("'").substringBefore("'")
+                .ifBlank { btn.parents().firstOrNull { it.tagName() == "tr" }?.selectFirst("td")?.text().orEmpty() }
+            if (text.isNotBlank() && text != "this") rules += HoleRule(text.trim())
+        }
+        if (rules.isEmpty()) {
+            for (tr in main.select("#rules-table tr, .rules tr, table:has(th:contains(Rule)) tr")) {
+                val td = tr.selectFirst("td")?.text()?.trim() ?: continue
+                if (td.isNotBlank()) rules += HoleRule(td)
+            }
+        }
+
+        val flairs = mutableListOf<HoleFlair>()
+        for (btn in main.select("[onclick*=deleteHoleFlair]")) {
+            val onclick = btn.attr("onclick")
+            val text = onclick.substringAfter("deleteHoleFlair(").substringAfter("'").substringBefore("'")
+                .ifBlank { btn.parents().firstOrNull { it.tagName() == "tr" }?.selectFirst("td")?.text().orEmpty() }
+            if (text.isNotBlank() && text != "this") flairs += HoleFlair(text.trim())
+        }
+        if (flairs.isEmpty()) {
+            for (tr in main.select("#flairs-table tr, .flairs tr, table:has(th:contains(Flair)) tr")) {
+                val td = tr.selectFirst("td")?.text()?.trim() ?: continue
+                if (td.isNotBlank()) flairs += HoleFlair(td)
+            }
+        }
+
+        val userFlairs = mutableListOf<HoleFlair>()
+        for (btn in main.select("[onclick*=deleteUserFlairDef]")) {
+            val onclick = btn.attr("onclick")
+            val text = onclick.substringAfter("deleteUserFlairDef(").substringAfter("'").substringBefore("'")
+                .ifBlank { btn.parents().firstOrNull { it.tagName() == "tr" }?.selectFirst("td")?.text().orEmpty() }
+            if (text.isNotBlank() && text != "this") userFlairs += HoleFlair(text.trim())
+        }
+
+        val pending = mutableListOf<HoleMemberAction>()
+        for (btn in main.select("[onclick*=approveJoin], [action*=/join/approve]")) {
+            val onclick = btn.attr("onclick")
+            val user = onclick.substringAfter("approveJoin(").substringAfter("'").substringBefore("'")
+                .ifBlank { btn.parents().firstOrNull { it.tagName() == "tr" }?.selectFirst("td, a")?.text().orEmpty() }
+            if (user.isNotBlank() && user != "event" && user != "this") {
+                pending += HoleMemberAction(user.trim().removePrefix("@"))
+            }
+        }
+
+        val blocked = mutableListOf<HoleMemberAction>()
+        for (btn in main.select("[onclick*=unblockJoin], [action*=/join/unblock]")) {
+            val onclick = btn.attr("onclick")
+            val user = onclick.substringAfter("unblockJoin(").substringAfter("'").substringBefore("'")
+                .ifBlank { btn.parents().firstOrNull { it.tagName() == "tr" }?.selectFirst("td, a")?.text().orEmpty() }
+            if (user.isNotBlank() && user != "event" && user != "this") {
+                blocked += HoleMemberAction(user.trim().removePrefix("@"))
+            }
+        }
+
+        val stealth = main.selectFirst("input[name=stealth], input#stealth, input[onchange*=stealth]")?.hasAttr("checked") == true
+        val publicUse = main.selectFirst("input[name=public_use], input#public_use, input[onchange*=public_use]")?.hasAttr("checked") == true
+        val hideModList = main.selectFirst("input[name=hide_mod_list], input[name=modlist], input[onchange*=modlist]")?.hasAttr("checked") == true
+        val anonPosting = main.selectFirst("input[name=anon_posting], input[onchange*=anon_posting]")?.hasAttr("checked") == true
+        val allowCustomUserFlairs = main.selectFirst("input[name=allow_custom_user_flairs]")?.hasAttr("checked") == true
+
+        val banners = main.select("img.hole-banner, img[alt*=banner], .hole-banner img")
+            .mapNotNull { it.attr("src").trim().takeIf { s -> s.isNotBlank() } }
+
+        val reports = mutableListOf<HoleModReport>()
+        for (row in main.select(".report-lane, [data-report-id], #reports tr, .reports-table tr")) {
+            val id = row.attr("data-report-id").ifBlank { row.selectFirst("[data-remove-report]")?.attr("data-remove-report").orEmpty() }
+            if (id.isNotBlank()) {
+                val kind = row.attr("data-report-kind").ifBlank { "post" }
+                val content = row.selectFirst(".report-content, .card-text, td:nth-child(2)")?.text()?.trim().orEmpty()
+                val reason = row.selectFirst(".report-reason, td:nth-child(3)")?.text()?.trim().orEmpty()
+                val reporter = row.selectFirst(".report-by, td:nth-child(4)")?.text()?.trim()?.removePrefix("@").orEmpty()
+                reports += HoleModReport(id = id, kind = kind, content = content, reason = reason, reporter = reporter)
+            }
+        }
+
         val canEdit = main.selectFirst("form[onsubmit*=saveHoleDisplayName]") != null ||
             main.selectFirst("form[onsubmit*=saveHoleContentFilters]") != null ||
-            main.selectFirst("form[action*=marsey_image]") != null
+            main.selectFirst("form[action*=marsey_image]") != null ||
+            main.selectFirst("form[action*=display_name]") != null ||
+            main.selectFirst("input[name=display_name]") != null
+
         return HoleSettings(
             hole = hole,
             displayName = display,
             blockedIps = ips.trim(),
             blockedWords = words.trim(),
+            customDomain = customDomain,
+            titleEditWindow = titleEditWindow,
+            joinType = joinType,
             logoUrl = logo,
+            logoUploadAction = uploadAction,
+            logoUploadField = uploadField,
+            rules = rules.distinctBy { it.text },
+            flairs = flairs.distinctBy { it.text },
+            userFlairs = userFlairs.distinctBy { it.text },
+            pendingRequests = pending.distinctBy { it.username },
+            blockedMembers = blocked.distinctBy { it.username },
+            stealth = stealth,
+            publicUse = publicUse,
+            hideModList = hideModList,
+            anonPosting = anonPosting,
+            allowCustomUserFlairs = allowCustomUserFlairs,
+            banners = banners.distinct(),
+            reports = reports.distinctBy { it.id },
             canEdit = canEdit,
         )
     }
@@ -1276,4 +1384,4 @@ private fun JsonObject.obj(key: String): JsonObject? =
     runCatching { this[key]?.jsonObject }.getOrNull()
 
 internal fun JsonPrimitive.contentOrNullSafe(): String? =
-    runCatching { if (this is JsonPrimitive && this.isString) content else content }.getOrNull()
+    runCatching { content }.getOrNull()

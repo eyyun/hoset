@@ -1,5 +1,9 @@
 package com.delidehset.mobile.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,15 +16,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.TextButton
 import com.delidehset.mobile.ui.Text
+import com.delidehset.mobile.ui.t
 import com.delidehset.mobile.ui.tr
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -31,7 +44,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -65,6 +82,25 @@ fun SubmitScreen(
     var anonymous by remember { mutableStateOf(!signedIn) }
     var tripcode by remember { mutableStateOf("") }
     var holeMenu by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var attachedFile by remember { mutableStateOf<Triple<String, String, ByteArray>?>(null) }
+    var previewBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val stream = context.contentResolver.openInputStream(uri)
+            val bytes = stream?.use { it.readBytes() } ?: return@runCatching
+            val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val name = "upload_" + System.currentTimeMillis() + ".jpg"
+            attachedFile = Triple(name, mime, bytes)
+            previewBitmap = bitmap
+        }
+    }
 
     LaunchedEffect(Unit) { vm.load() }
     LaunchedEffect(state.done) {
@@ -161,6 +197,83 @@ fun SubmitScreen(
                 colors = submitFieldColors(),
             )
 
+            // ---- image attachment ----
+            Spacer(Modifier.height(8.dp))
+            val currentPreview = previewBitmap
+            val currentAttached = attachedFile
+            if (currentPreview != null && currentAttached != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DeliColors.Surface, DeliShapes.control)
+                        .padding(8.dp),
+                ) {
+                    Image(
+                        bitmap = currentPreview.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(DeliShapes.small),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            t("Görsel eklendi"),
+                            color = DeliColors.OnBackground,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            currentAttached.first,
+                            color = DeliColors.OnSurfaceVariant,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                        )
+                    }
+                    IconButton(onClick = {
+                        attachedFile = null
+                        previewBitmap = null
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = t("Kaldır"),
+                            tint = DeliColors.Danger,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(DeliShapes.control)
+                        .background(DeliColors.Surface)
+                        .clickable {
+                            pickImage.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AddPhotoAlternate,
+                            contentDescription = null,
+                            tint = DeliColors.Primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            t("Görsel ekle"),
+                            color = DeliColors.Primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+
             // ---- nsfw ----
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -228,6 +341,7 @@ fun SubmitScreen(
                         nsfw = nsfw,
                         anonymous = anonymous && isAnonymousForm,
                         tripcodeSecret = tripcode.takeIf { it.isNotBlank() },
+                        image = attachedFile,
                     )
                 }
             }
